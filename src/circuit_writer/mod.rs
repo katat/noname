@@ -13,6 +13,7 @@ use crate::{
 };
 
 pub use fn_env::{FnEnv, VarInfo};
+use kimchi::circuits::polynomials::generic::{GENERIC_COEFFS, GENERIC_REGISTERS};
 use serde::{Deserialize, Serialize};
 //use serde::{Deserialize, Serialize};
 pub use writer::{Gate, GateKind, Wiring};
@@ -22,6 +23,75 @@ use self::writer::PendingGate;
 pub mod fn_env;
 pub mod writer;
 
+pub struct KimchiBackend {
+    /// The gates created by the circuit generation.
+    pub gates: Vec<Gate<kimchi::mina_curves::pasta::Fp>>,
+
+    /// The wiring of the circuit.
+    /// It is created during circuit generation.
+    pub(crate) wiring: HashMap<usize, Wiring>,
+
+    /// If set to false, a single generic gate will be used per double generic gate.
+    /// This can be useful for debugging.
+    pub(crate) double_generic_gate_optimization: bool,
+
+    /// This is used to implement the double generic gate,
+    /// which encodes two generic gates.
+    pub(crate) pending_generic_gate: Option<PendingGate<kimchi::mina_curves::pasta::Fp>>,
+}
+
+pub struct R1CSBackend {
+
+}
+
+// enums for proving backends
+pub enum ProvingBackend {
+    Kimchi(KimchiBackend),
+    R1CS(R1CSBackend),
+}
+
+impl KimchiBackend {
+    pub fn add_generic_gate(
+        &mut self,
+        label: &'static str,
+        mut vars: Vec<Option<CellVar>>,
+        mut coeffs: Vec<kimchi::mina_curves::pasta::Fp>,
+        span: Span,
+    ) {
+        // padding
+        let coeffs_padding = GENERIC_COEFFS.checked_sub(coeffs.len()).unwrap();
+        coeffs.extend(std::iter::repeat(kimchi::mina_curves::pasta::Fp::zero()).take(coeffs_padding));
+
+        let vars_padding = GENERIC_REGISTERS.checked_sub(vars.len()).unwrap();
+        vars.extend(std::iter::repeat(None).take(vars_padding));
+
+        // if the double gate optimization is not set, just add the gate
+        if !self.double_generic_gate_optimization {
+            self.add_gate(label, GateKind::DoubleGeneric, vars, coeffs, span);
+            return;
+        }
+
+        // only add a double generic gate if we have two of them
+        if let Some(generic_gate) = self.pending_generic_gate.take() {
+            coeffs.extend(generic_gate.coeffs);
+            vars.extend(generic_gate.vars);
+
+            // TODO: what to do with the label and span?
+
+            self.add_gate(label, GateKind::DoubleGeneric, vars, coeffs, span);
+        } else {
+            // otherwise queue it
+            self.pending_generic_gate = Some(PendingGate {
+                label,
+                coeffs,
+                vars,
+                span,
+            });
+        }
+    }
+}
+
+
 //#[derive(Debug, Serialize, Deserialize)]
 #[derive(Debug)]
 pub struct CircuitWriter<F> where F: Field {
@@ -30,6 +100,8 @@ pub struct CircuitWriter<F> where F: Field {
     // This is because, depending on the value of [current_module],
     // the type checker state might be this one, or one of the ones in [dependencies].
     typed: TypeChecker<F>,
+
+    pub proving_backend: ProvingBackend,
 
     /// Once this is set, you can generate a witness (and can't modify the circuit?)
     // Note: I don't think we need this, but it acts as a nice redundant failsafe.
@@ -47,13 +119,6 @@ pub struct CircuitWriter<F> where F: Field {
     /// and used by the witness generator.
     pub(crate) rows_of_vars: Vec<Vec<Option<CellVar>>>,
 
-    /// The gates created by the circuit generation.
-    gates: Vec<Gate<F>>,
-
-    /// The wiring of the circuit.
-    /// It is created during circuit generation.
-    pub(crate) wiring: HashMap<usize, Wiring>,
-
     /// Size of the public input.
     pub(crate) public_input_size: usize,
 
@@ -70,14 +135,6 @@ pub struct CircuitWriter<F> where F: Field {
     /// Indexes used by the private inputs
     /// (this is useful to check that they appear in the circuit)
     pub(crate) private_input_indices: Vec<usize>,
-
-    /// If set to false, a single generic gate will be used per double generic gate.
-    /// This can be useful for debugging.
-    pub(crate) double_generic_gate_optimization: bool,
-
-    /// This is used to implement the double generic gate,
-    /// which encodes two generic gates.
-    pub(crate) pending_generic_gate: Option<PendingGate<F>>,
 
     /// We cache the association between a constant and its _constrained_ variable,
     /// this is to avoid creating a new constraint every time we need to hardcode the same constant.
@@ -165,20 +222,17 @@ impl<F: Field> CircuitWriter<F> {
 
 impl<F: Field> CircuitWriter<F> {
     /// Creates a global environment from the one created by the type checker.
-    fn new(typed: TypeChecker<F>, double_generic_gate_optimization: bool) -> Self {
+    fn new(typed: TypeChecker<F>, backend: ProvingBackend) -> Self {
         Self {
             typed,
+            proving_backend: backend,
             finalized: false,
             next_variable: 0,
             witness_vars: HashMap::new(),
             rows_of_vars: vec![],
-            gates: vec![],
-            wiring: HashMap::new(),
             public_input_size: 0,
             public_output: None,
             private_input_indices: vec![],
-            double_generic_gate_optimization,
-            pending_generic_gate: None,
             cached_constants: HashMap::new(),
             debug_info: vec![],
         }
@@ -186,10 +240,10 @@ impl<F: Field> CircuitWriter<F> {
 
     pub fn generate_circuit(
         typed: TypeChecker<F>,
-        double_generic_gate_optimization: bool,
+        backend: ProvingBackend,
     ) -> Result<CompiledCircuit<F>> {
         // create circuit writer
-        let mut circuit_writer = CircuitWriter::new(typed, double_generic_gate_optimization);
+        let mut circuit_writer = CircuitWriter::new(typed, backend);
 
         // get main function
         let qualified = FullyQualified::local("main".to_string());

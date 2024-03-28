@@ -1,5 +1,5 @@
 use crate::{
-    circuit_writer::CircuitWriter,
+    circuit_writer::{CircuitWriter, ProvingBackend},
     constants::{Field, Span},
     var::{ConstOrCell, Value, Var},
 };
@@ -32,14 +32,18 @@ pub fn add<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs:
             let res =
                 compiler.new_internal_var(Value::LinearCombination(vec![(one, *cvar)], *cst), span);
 
-            // create a gate to store the result
-            // TODO: we should use an add_generic function that takes advantage of the double generic gate
-            compiler.add_generic_gate(
-                "add a constant with a variable",
-                vec![Some(*cvar), None, Some(res)],
-                vec![one, zero, one.neg(), zero, *cst],
-                span,
-            );
+            // add constraint based on backend type
+            match compiler.proving_backend {
+                ProvingBackend::Kimchi(backend) => {
+                    backend.add_generic_gate(
+                        "add a constant with a variable",
+                        vec![Some(*cvar), None, Some(res)],
+                        vec![one, zero, one.neg(), zero, *cst],
+                        span,
+                    );
+                }
+                ProvingBackend::R1CS(_) => todo!(),
+            }
 
             Var::new_var(res, span)
         }
@@ -53,13 +57,18 @@ pub fn add<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs:
                 span,
             );
 
-            // create a gate to store the result
-            compiler.add_generic_gate(
-                "add two variables together",
-                vec![Some(*lhs), Some(*rhs), Some(res)],
-                vec![Field::one(), Field::one(), Field::one().neg()],
-                span,
-            );
+            // add constraint based on backend type
+            match compiler.proving_backend {
+                ProvingBackend::Kimchi(backend) => {
+                    backend.add_generic_gate(
+                        "add two variables together",
+                        vec![Some(*lhs), Some(*rhs), Some(res)],
+                        vec![Field::one(), Field::one(), Field::one().neg()],
+                        span,
+                    );
+                }
+                ProvingBackend::R1CS(_) => todo!(),
+            }
 
             Var::new_var(res, span)
         }

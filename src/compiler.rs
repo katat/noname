@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use miette::NamedSource;
 
 use crate::{
-    circuit_writer::CircuitWriter,
+    circuit_writer::{CircuitWriter, ProvingBackend},
     cli::packages::UserRepo,
     constants::Field,
     error::Result,
@@ -146,9 +146,9 @@ pub fn get_nast<F: Field>(
 pub fn compile<F: Field>(
     sources: &Sources,
     tast: TypeChecker<F>,
-    double_generic_gate_optimization: bool,
+    backend: ProvingBackend,
 ) -> miette::Result<CompiledCircuit<F>> {
-    CircuitWriter::generate_circuit(tast, double_generic_gate_optimization).into_miette(sources)
+    CircuitWriter::generate_circuit(tast, backend).into_miette(sources)
 }
 
 pub fn generate_witness<F: Field>(

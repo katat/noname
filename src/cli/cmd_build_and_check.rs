@@ -1,13 +1,10 @@
+use std::collections::HashMap;
+
 use camino::Utf8PathBuf as PathBuf;
 use miette::{Context, IntoDiagnostic};
 
 use crate::{
-    constants::Field,
-    cli::packages::path_to_package,
-    compiler::{compile, typecheck_next_file, Sources},
-    inputs::{parse_inputs, JsonInputs},
-    prover::{compile_to_indexes, ProverIndex, VerifierIndex},
-    type_checker::TypeChecker,
+    circuit_writer::KimchiBackend, cli::packages::path_to_package, compiler::{compile, typecheck_next_file, Sources}, constants::Field, inputs::{parse_inputs, JsonInputs}, prover::{compile_to_indexes, ProverIndex, VerifierIndex}, type_checker::TypeChecker
 };
 
 use super::packages::{
@@ -193,8 +190,15 @@ pub fn build<F: Field>(
     let (sources, tast) = produce_all_asts(curr_dir)?;
 
     // produce indexes
-    let double_generic_gate_optimization = false;
-    let compiled_circuit = compile(&sources, tast, double_generic_gate_optimization)?;
+    let kimchi_backend = KimchiBackend {
+        gates: vec![],
+        wiring: HashMap::new(),
+        double_generic_gate_optimization: false,
+        pending_generic_gate: None,
+    };
+    // let backend: ProvingBackend = ProvingBackend::Kimchi;
+
+    let compiled_circuit = compile(&sources, tast, kimchi_backend)?;
 
     if asm {
         println!("{}", compiled_circuit.asm(&sources, debug));
