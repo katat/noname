@@ -11,7 +11,7 @@ use ark_ff::{One, Zero};
 use std::ops::Neg;
 
 /// Adds two field elements
-pub fn add(compiler: &mut CircuitWriter, lhs: &ConstOrCell, rhs: &ConstOrCell, span: Span) -> Var {
+pub fn add<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs: &ConstOrCell<F>, span: Span) -> Var<F> {
     let zero = Field::zero();
     let one = Field::one();
 
@@ -67,7 +67,7 @@ pub fn add(compiler: &mut CircuitWriter, lhs: &ConstOrCell, rhs: &ConstOrCell, s
 }
 
 /// Subtracts two variables, we only support variables that are of length 1.
-pub fn sub(compiler: &mut CircuitWriter, lhs: &ConstOrCell, rhs: &ConstOrCell, span: Span) -> Var {
+pub fn sub<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs: &ConstOrCell<F>, span: Span) -> Var<F> {
     let zero = Field::zero();
     let one = Field::one();
 
@@ -145,7 +145,7 @@ pub fn sub(compiler: &mut CircuitWriter, lhs: &ConstOrCell, rhs: &ConstOrCell, s
 }
 
 /// Multiplies two field elements
-pub fn mul(compiler: &mut CircuitWriter, lhs: &ConstOrCell, rhs: &ConstOrCell, span: Span) -> Var {
+pub fn mul<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs: &ConstOrCell<F>, span: Span) -> Var<F> {
     let zero = Field::zero();
     let one = Field::one();
 
@@ -201,7 +201,7 @@ pub fn mul(compiler: &mut CircuitWriter, lhs: &ConstOrCell, rhs: &ConstOrCell, s
 
 /// This takes variables that can be anything, and returns a boolean
 // TODO: so perhaps it's not really relevant in this file?
-pub fn equal(compiler: &mut CircuitWriter, lhs: &Var, rhs: &Var, span: Span) -> Var {
+pub fn equal<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &Var<F>, rhs: &Var<F>, span: Span) -> Var<F> {
     // sanity check
     assert_eq!(lhs.len(), rhs.len());
 
@@ -228,12 +228,12 @@ pub fn equal(compiler: &mut CircuitWriter, lhs: &Var, rhs: &Var, span: Span) -> 
 }
 
 /// Returns a new variable set to 1 if x1 is equal to x2, 0 otherwise.
-fn equal_cells(
-    compiler: &mut CircuitWriter,
-    x1: &ConstOrCell,
-    x2: &ConstOrCell,
+fn equal_cells<F: Field>(
+    compiler: &mut CircuitWriter<F>,
+    x1: &ConstOrCell<F>,
+    x2: &ConstOrCell<F>,
     span: Span,
-) -> Var {
+) -> Var<F> {
     // These four constraints are enough:
     //
     // 1. `diff = x2 - x1`
@@ -352,13 +352,13 @@ fn equal_cells(
     }
 }
 
-pub fn if_else(
-    compiler: &mut CircuitWriter,
-    cond: &Var,
-    then_: &Var,
-    else_: &Var,
+pub fn if_else<F: Field>(
+    compiler: &mut CircuitWriter<F>,
+    cond: &Var<F>,
+    then_: &Var<F>,
+    else_: &Var<F>,
     span: Span,
-) -> Var {
+) -> Var<F> {
     assert_eq!(cond.len(), 1);
     assert_eq!(then_.len(), else_.len());
 
@@ -374,13 +374,13 @@ pub fn if_else(
     Var::new(vars, span)
 }
 
-pub fn if_else_inner(
-    compiler: &mut CircuitWriter,
-    cond: &ConstOrCell,
-    then_: &ConstOrCell,
-    else_: &ConstOrCell,
+pub fn if_else_inner<F: Field>(
+    compiler: &mut CircuitWriter<F>,
+    cond: &ConstOrCell<F>,
+    then_: &ConstOrCell<F>,
+    else_: &ConstOrCell<F>,
     span: Span,
-) -> Var {
+) -> Var<F> {
     // we need to constrain:
     //
     // * res = (1 - cond) * else + cond * then
