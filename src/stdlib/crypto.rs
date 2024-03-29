@@ -5,12 +5,15 @@ use kimchi::circuits::polynomials::poseidon::{POS_ROWS_PER_HASH, ROUNDS_PER_ROW}
 use kimchi::mina_poseidon::constants::{PlonkSpongeConstantsKimchi, SpongeConstants};
 use kimchi::mina_poseidon::permutation::full_round;
 
+use crate::imports::FnKind;
+use crate::lexer::Token;
+use crate::parser::types::FnSig;
 use crate::parser::ParserCtx;
 use crate::type_checker::FnInfo;
 use crate::{
     circuit_writer::{CircuitWriter, GateKind, VarInfo},
     constants::{self, Field, Span},
-    error::{ErrorKind, Result},
+    error::{ErrorKind, Result, Error},
     imports::FnHandle,
     parser::types::TyKind,
     var::{ConstOrCell, Value, Var},
@@ -23,11 +26,38 @@ pub enum CryptoFn<F: Field> {
     Poseidon(FnInfo<F>),
 }
 
-impl<F: Field> FromStr for CryptoFn<F> {
-    type Err = ();
+impl<F: Field> CryptoFn<F> {
+    pub fn from_str(s: &str) -> Result<CryptoFn<F>> {
+        let parse_fn =
+            |sig: &'static str,
+             fn_ptr: FnHandle<F>|
+             -> Result<CryptoFn<F>> {
+                let ctx = &mut ParserCtx::default();
+                // filename_id 0 is for builtins
+                let mut tokens = Token::parse(0, sig)?;
+                let sig = FnSig::parse(ctx, &mut tokens)?;
+
+                match sig.name.value.as_str() {
+                    POSEIDON_FN => Ok(CryptoFn::Poseidon(FnInfo {
+                        kind: FnKind::BuiltIn(sig, fn_ptr),
+                        span: Span::default(),
+                    })),
+                    _ => Err(Error::new("crypto-builtin", ErrorKind::InvalidFunctionName, Span::default()))
+                }
+            };
+
+        match s {
+            // TODO: cache parsed functions
+            POSEIDON_FN => parse_fn(POSEIDON_FN, poseidon),
+        }
+    }
 }
 
-pub fn poseidon<F: Field>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], span: Span) -> Result<Option<Var<F>>> {
+pub fn poseidon<F: Field>(
+    compiler: &mut CircuitWriter<F>,
+    vars: &[VarInfo<F>],
+    span: Span,
+) -> Result<Option<Var<F>>> {
     //
     // sanity checks
     //
@@ -78,7 +108,7 @@ pub fn poseidon<F: Field>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], 
     // pad the input (for the capacity)
     let zero_var = compiler.add_constant(
         Some("encoding constant 0 for the capacity of poseidon"),
-        Field::zero(),
+        F::zero(),
         span,
     );
     cells.push(zero_var);
@@ -108,7 +138,7 @@ pub fn poseidon<F: Field>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], 
                         let mut acc = vec![x1, x2, x3];
 
                         // Do one full round on the previous value
-                        full_round::<Field, PlonkSpongeConstantsKimchi>(
+                        full_round::<F, PlonkSpongeConstantsKimchi>(
                             &kimchi::mina_poseidon::pasta::fp_kimchi::params(),
                             &mut acc,
                             offset + i,

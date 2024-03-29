@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use crate::{
     cli::packages::UserRepo,
@@ -94,7 +94,7 @@ impl<F: Field> TypeChecker<F> {
     pub(crate) fn fn_info(&self, qualified: &FullyQualified) -> Option<&FnInfo<F>> {
         if qualified.module == Some(UserRepo::new("std/builtins")) {
             // if it's a built-in: get it from a global
-            BuiltInFunctions::from_str(&qualified.name)
+            Some(BuiltInFunctions::from_str(&qualified.name).unwrap().fn_info())
         } else {
             self.functions.get(qualified)
         }

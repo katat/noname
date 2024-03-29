@@ -17,8 +17,8 @@ pub fn is_valid<F: Field>(f: F) -> bool {
 }
 
 pub fn check<F: Field>(compiler: &mut CircuitWriter<F>, xx: &ConstOrCell<F>, span: Span) {
-    let zero = Field::zero();
-    let one = Field::one();
+    let zero = F::zero();
+    let one = F::one();
 
     match xx {
         ConstOrCell::Const(ff) => assert!(is_valid(*ff)),
@@ -53,8 +53,8 @@ pub fn and<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs:
             let res = compiler.new_internal_var(Value::Mul(*lhs, *rhs), span);
 
             // create a gate to constrain the result
-            let zero = Field::zero();
-            let one = Field::one();
+            let zero = F::zero();
+            let one = F::one();
             compiler.add_generic_gate(
                 "constrain the AND as lhs * rhs",
                 vec![Some(*lhs), Some(*rhs), Some(res)],
@@ -72,9 +72,9 @@ pub fn not<F: Field>(compiler: &mut CircuitWriter<F>, var: &ConstOrCell<F>, span
     match var {
         ConstOrCell::Const(cst) => {
             let value = if cst.is_one() {
-                Field::zero()
+                F::zero()
             } else {
-                Field::one()
+                F::one()
             };
 
             Var::new_constant(value, span)
@@ -82,8 +82,8 @@ pub fn not<F: Field>(compiler: &mut CircuitWriter<F>, var: &ConstOrCell<F>, span
 
         // constant and a var
         ConstOrCell::Cell(cvar) => {
-            let zero = Field::zero();
-            let one = Field::one();
+            let zero = F::zero();
+            let one = F::one();
 
             // create a new variable to store the result
             let lc = Value::LinearCombination(vec![(one.neg(), *cvar)], one); // 1 - X

@@ -4,7 +4,7 @@ use camino::Utf8PathBuf as PathBuf;
 use miette::{Context, IntoDiagnostic};
 
 use crate::{
-    circuit_writer::KimchiBackend, cli::packages::path_to_package, compiler::{compile, typecheck_next_file, Sources}, constants::Field, inputs::{parse_inputs, JsonInputs}, prover::{compile_to_indexes, ProverIndex, VerifierIndex}, type_checker::TypeChecker
+    circuit_writer::{KimchiBackend, ProvingBackend}, cli::packages::path_to_package, compiler::{compile, typecheck_next_file, Sources}, constants::Field, inputs::{parse_inputs, JsonInputs}, prover::{compile_to_indexes, ProverIndex, VerifierIndex}, type_checker::TypeChecker
 };
 
 use super::packages::{
@@ -198,7 +198,7 @@ pub fn build<F: Field>(
     };
     // let backend: ProvingBackend = ProvingBackend::Kimchi;
 
-    let compiled_circuit = compile(&sources, tast, kimchi_backend)?;
+    let compiled_circuit = compile(&sources, tast, ProvingBackend::Kimchi(kimchi_backend))?;
 
     if asm {
         println!("{}", compiled_circuit.asm(&sources, debug));

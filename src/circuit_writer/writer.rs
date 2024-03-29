@@ -592,7 +592,7 @@ impl<F: Field> CircuitWriter<F> {
 
             ExprKind::BigInt(b) => {
                 let biguint = BigUint::from_str_radix(b, 10).expect("failed to parse number.");
-                let ff = Field::try_from(biguint).map_err(|_| {
+                let ff = F::try_from(biguint).map_err(|_| {
                     self.error(ErrorKind::CannotConvertToField(b.to_string()), expr.span)
                 })?;
 
@@ -601,7 +601,7 @@ impl<F: Field> CircuitWriter<F> {
             }
 
             ExprKind::Bool(b) => {
-                let value = if *b { Field::one() } else { Field::zero() };
+                let value = if *b { F::one() } else { F::zero() };
                 let res = VarOrRef::Var(Var::new_constant(value, expr.span));
                 Ok(Some(res))
             }
@@ -751,11 +751,11 @@ impl<F: Field> CircuitWriter<F> {
         let var = self.new_internal_var(Value::Constant(value), span);
         self.cached_constants.insert(value, var);
 
-        let zero = Field::zero();
+        let zero = F::zero();
         self.add_generic_gate(
             label.unwrap_or("hardcode a constant"),
             vec![Some(var)],
-            vec![Field::one(), zero, zero, zero, value.neg()],
+            vec![F::one(), zero, zero, zero, value.neg()],
             span,
         );
 
@@ -830,7 +830,7 @@ impl<F: Field> CircuitWriter<F> {
                 "add public input",
                 GateKind::DoubleGeneric,
                 vec![Some(cvar)],
-                vec![Field::one()],
+                vec![F::one()],
                 span,
             );
         }
@@ -853,7 +853,7 @@ impl<F: Field> CircuitWriter<F> {
             self.add_generic_gate(
                 "add public output",
                 vec![Some(cvar)],
-                vec![Field::one()],
+                vec![F::one()],
                 span,
             );
         }

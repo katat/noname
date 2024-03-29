@@ -9,7 +9,7 @@ use crate::{
     compiler::Sources,
     constants::{Field, NUM_REGISTERS},
     error::{Error, ErrorKind, Result},
-    helpers::PrettyField as _,
+    helpers::{self, PrettyField as _},
     inputs::JsonInputs,
     type_checker::FnInfo,
     var::{CellVar, Value},
@@ -36,7 +36,7 @@ impl<F: Field> WitnessEnv<F> {
 #[derive(Debug)]
 pub struct Witness<F: Field>(Vec<[F; NUM_REGISTERS]>);
 
-impl<F: Field> Witness<F> {
+impl<F: Field + helpers::PrettyField> Witness<F> {
     /// kimchi uses a transposed witness
     pub fn to_kimchi_witness(&self) -> [Vec<F>; NUM_REGISTERS] {
         let transposed = vec![Vec::with_capacity(self.0.len()); NUM_REGISTERS];

@@ -17,28 +17,39 @@ use crate::{
     var::{ConstOrCell, Var},
 };
 
-use self::crypto::CRYPTO_FNS;
+// use self::crypto::CRYPTO_FNS;
 
 pub mod crypto;
 
-pub static CRYPTO_MODULE: Lazy<BuiltinModule> = Lazy::new(|| {
-    let functions = parse_fn_sigs(&CRYPTO_FNS);
-    BuiltinModule { functions }
-});
+// pub static CRYPTO_MODULE: Lazy<BuiltinModule> = Lazy::new(|| {
+//     let functions = parse_fn_sigs(&CRYPTO_FNS);
+//     BuiltinModule { functions }
+// });
 
 pub fn get_std_fn<F: Field>(submodule: &str, fn_name: &str, span: Span) -> Result<FnInfo<F>> {
     match submodule {
-        "crypto" => CRYPTO_MODULE
-            .functions
-            .get(fn_name)
-            .cloned()
-            .ok_or_else(|| {
-                Error::new(
+        "crypto" => 
+            match crypto::CryptoFn::from_str(fn_name) {
+                Ok(crypto_fn) => match crypto_fn {
+                    crypto::CryptoFn::Poseidon(fn_info) => Ok(fn_info),
+                },
+                Err(_) => Err(Error::new(
                     "type-checker",
                     ErrorKind::UnknownExternalFn(submodule.to_string(), fn_name.to_string()),
                     span,
-                )
-            }),
+                )),
+            },
+            // CRYPTO_MODULE
+            // .functions
+            // .get(fn_name)
+            // .cloned()
+            // .ok_or_else(|| {
+            //     Error::new(
+            //         "type-checker",
+            //         ErrorKind::UnknownExternalFn(submodule.to_string(), fn_name.to_string()),
+            //         span,
+            //     )
+            // }),
         _ => Err(Error::new(
             "type-checker",
             ErrorKind::StdImport(submodule.to_string()),
@@ -131,10 +142,10 @@ fn assert_eq<F: Field>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], spa
                 "constrain var - cst = 0 to check equality",
                 vec![Some(*cvar)],
                 vec![
-                    Field::one(),
-                    Field::zero(),
-                    Field::zero(),
-                    Field::zero(),
+                    F::one(),
+                    F::zero(),
+                    F::zero(),
+                    F::zero(),
                     cst.neg(),
                 ],
                 span,
@@ -145,7 +156,7 @@ fn assert_eq<F: Field>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], spa
             compiler.add_generic_gate(
                 "constrain lhs - rhs = 0 to assert that they are equal",
                 vec![Some(*lhs), Some(*rhs)],
-                vec![Field::one(), Field::one().neg()],
+                vec![F::one(), F::one().neg()],
                 span,
             );
         }
@@ -174,8 +185,8 @@ fn assert<F: Field>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], span: 
         }
         ConstOrCell::Cell(cvar) => {
             // TODO: use permutation to check that
-            let zero = Field::zero();
-            let one = Field::one();
+            let zero = F::zero();
+            let one = F::one();
             compiler.add_generic_gate(
                 "constrain 1 - X = 0 to assert that X is true",
                 vec![None, Some(*cvar)],
@@ -189,37 +200,33 @@ fn assert<F: Field>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], span: 
     Ok(None)
 }
 
-impl<F: Field> FromStr for BuiltInFunctions<F> {
-    type Err = ();
+impl<F: Field> BuiltInFunctions<F> {
 
-    fn from_str(s: &str) -> std::result::Result<BuiltInFunctions<F>, ()> {
-        let parse_fn = |sig: &'static str, fn_ptr: fn()| -> Result<FnInfo, ()> {
+    pub fn from_str(s: &str) -> Result<BuiltInFunctions<F>> {
+        let parse_fn = |sig: &'static str, fn_ptr: FnHandle<F>| -> Result<BuiltInFunctions<F>> {
             let ctx = &mut ParserCtx::default();
             // filename_id 0 is for builtins
             let mut tokens = Token::parse(0, sig)?;
             let sig = FnSig::parse(ctx, &mut tokens)?;
 
             // The closure now returns an instance of BuiltInFunctions<F>
-            let builtin_fn = match sig.name.value {
-                ASSERT_FN => BuiltInFunctions::Assert(FnInfo {
+            match sig.name.value.as_str() {
+                ASSERT_FN => Ok(BuiltInFunctions::Assert(FnInfo {
                     kind: FnKind::BuiltIn(sig, fn_ptr),
                     span: Span::default(),
-                }),
-                ASSERT_EQ_FN => BuiltInFunctions::AssertEq(FnInfo {
+                })),
+                ASSERT_EQ_FN => Ok(BuiltInFunctions::AssertEq(FnInfo {
                     kind: FnKind::BuiltIn(sig, fn_ptr),
                     span: Span::default(),
-                }),
-                _ => return Err(()),
-            };
-
-            Ok(builtin_fn)
+                })),
+                _ => Err(Error::new("builtin", ErrorKind::InvalidFunctionName, Span::default()))
+            }
         };
 
         match s {
             // TODO: cache parsed functions
             ASSERT_FN => parse_fn(ASSERT_FN, assert),
             ASSERT_EQ_FN => parse_fn(ASSERT_EQ_FN, assert_eq),
-            _ => Err(()),
         }
     }
 }
