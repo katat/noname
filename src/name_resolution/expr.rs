@@ -1,7 +1,9 @@
+use std::str::FromStr;
+
 use crate::{
     cli::packages::UserRepo,
     error::Result,
-    imports::BUILTIN_FNS,
+    imports::BuiltInFunctions,
     parser::{types::ModulePath, CustomType, Expr, ExprKind},
     stdlib::QUALIFIED_BUILTINS,
 };
@@ -22,7 +24,7 @@ impl NameResCtx {
                 fn_name,
                 args,
             } => {
-                if matches!(module, ModulePath::Local) && BUILTIN_FNS.get(&fn_name.value).is_some()
+                if matches!(module, ModulePath::Local) && BuiltInFunctions::from_str(&fn_name.value).is_some()
                 {
                     // if it's a builtin, use `std::builtin`
                     *module = ModulePath::Absolute(UserRepo::new(QUALIFIED_BUILTINS));

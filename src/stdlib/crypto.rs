@@ -1,8 +1,12 @@
+use std::str::FromStr;
+
 use ark_ff::Zero;
 use kimchi::circuits::polynomials::poseidon::{POS_ROWS_PER_HASH, ROUNDS_PER_ROW};
 use kimchi::mina_poseidon::constants::{PlonkSpongeConstantsKimchi, SpongeConstants};
 use kimchi::mina_poseidon::permutation::full_round;
 
+use crate::parser::ParserCtx;
+use crate::type_checker::FnInfo;
 use crate::{
     circuit_writer::{CircuitWriter, GateKind, VarInfo},
     constants::{self, Field, Span},
@@ -14,7 +18,14 @@ use crate::{
 
 const POSEIDON_FN: &str = "poseidon(input: [Field; 2]) -> [Field; 3]";
 
-pub const CRYPTO_FNS: [(&str, FnHandle<F>); 1] = [(POSEIDON_FN, poseidon<F>)];
+// pub const CRYPTO_FNS: [(&str, FnHandle<F>); 1] = [(POSEIDON_FN, poseidon<F>)];
+pub enum CryptoFn<F: Field> {
+    Poseidon(FnInfo<F>),
+}
+
+impl<F: Field> FromStr for CryptoFn<F> {
+    type Err = ();
+}
 
 pub fn poseidon<F: Field>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], span: Span) -> Result<Option<Var<F>>> {
     //

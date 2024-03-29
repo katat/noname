@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Neg as _};
+use std::{collections::HashMap, ops::Neg as _, str::FromStr};
 
 use ark_ff::{One as _, Zero};
 use once_cell::sync::Lazy;
@@ -7,7 +7,7 @@ use crate::{
     circuit_writer::{CircuitWriter, VarInfo},
     constants::{Field, Span},
     error::{Error, ErrorKind, Result},
-    imports::{BuiltinModule, FnHandle, FnKind},
+    imports::{BuiltInFunctions, BuiltinModule, FnHandle, FnKind},
     lexer::Token,
     parser::{
         types::{FnSig, TyKind},
@@ -80,9 +80,6 @@ pub const QUALIFIED_BUILTINS: &str = "std/builtins";
 
 const ASSERT_FN: &str = "assert(condition: Bool)";
 const ASSERT_EQ_FN: &str = "assert_eq(lhs: Field, rhs: Field)";
-
-pub const BUILTIN_FNS_DEFS: [(&str, FnHandle); 2] =
-    [(ASSERT_EQ_FN, assert_eq), (ASSERT_FN, assert)];
 
 /// Asserts that two vars are equal.
 fn assert_eq<F: Field>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], span: Span) -> Result<Option<Var<F>>> {
@@ -190,4 +187,39 @@ fn assert<F: Field>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], span: 
     }
 
     Ok(None)
+}
+
+impl<F: Field> FromStr for BuiltInFunctions<F> {
+    type Err = ();
+
+    fn from_str(s: &str) -> std::result::Result<BuiltInFunctions<F>, ()> {
+        let parse_fn = |sig: &'static str, fn_ptr: fn()| -> Result<FnInfo, ()> {
+            let ctx = &mut ParserCtx::default();
+            // filename_id 0 is for builtins
+            let mut tokens = Token::parse(0, sig)?;
+            let sig = FnSig::parse(ctx, &mut tokens)?;
+
+            // The closure now returns an instance of BuiltInFunctions<F>
+            let builtin_fn = match sig.name.value {
+                ASSERT_FN => BuiltInFunctions::Assert(FnInfo {
+                    kind: FnKind::BuiltIn(sig, fn_ptr),
+                    span: Span::default(),
+                }),
+                ASSERT_EQ_FN => BuiltInFunctions::AssertEq(FnInfo {
+                    kind: FnKind::BuiltIn(sig, fn_ptr),
+                    span: Span::default(),
+                }),
+                _ => return Err(()),
+            };
+
+            Ok(builtin_fn)
+        };
+
+        match s {
+            // TODO: cache parsed functions
+            ASSERT_FN => parse_fn(ASSERT_FN, assert),
+            ASSERT_EQ_FN => parse_fn(ASSERT_EQ_FN, assert_eq),
+            _ => Err(()),
+        }
+    }
 }

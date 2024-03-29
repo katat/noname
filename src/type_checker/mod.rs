@@ -4,7 +4,7 @@ use crate::{
     cli::packages::UserRepo,
     constants::{Field, Span},
     error::{Error, ErrorKind, Result},
-    imports::{FnKind, BUILTIN_FNS},
+    imports::{BuiltInFunctions, FnKind},
     name_resolution::NAST,
     parser::{
         types::{FuncOrMethod, FunctionDef, ModulePath, RootKind, Ty, TyKind},
@@ -18,6 +18,7 @@ pub use fn_env::{TypeInfo, TypedFnEnv};
 
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use strum::IntoEnumIterator;
 
 pub mod checker;
 pub mod fn_env;
@@ -93,7 +94,7 @@ impl<F: Field> TypeChecker<F> {
     pub(crate) fn fn_info(&self, qualified: &FullyQualified) -> Option<&FnInfo<F>> {
         if qualified.module == Some(UserRepo::new("std/builtins")) {
             // if it's a built-in: get it from a global
-            BUILTIN_FNS.get(&qualified.name)
+            BuiltInFunctions::from_str(&qualified.name)
         } else {
             self.functions.get(qualified)
         }
@@ -141,8 +142,10 @@ impl<F: Field> TypeChecker<F> {
 
         // initialize it with the builtins
         let builtin_module = ModulePath::Absolute(UserRepo::new(QUALIFIED_BUILTINS));
-        for (fn_name, fn_info) in BUILTIN_FNS.iter() {
-            let qualified = FullyQualified::new(&builtin_module, fn_name);
+        for it in BuiltInFunctions::iter() {
+            let fn_info = it.fn_info();
+
+            let qualified = FullyQualified::new(&builtin_module, &fn_info.sig().name.value);
             if type_checker
                 .functions
                 .insert(qualified, fn_info.clone())

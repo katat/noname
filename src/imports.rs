@@ -1,16 +1,10 @@
 use std::{collections::HashMap, fmt};
 
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use strum_macros::EnumIter;
 
 use crate::{
-    circuit_writer::{CircuitWriter, VarInfo},
-    constants::{Field, Span},
-    error::Result,
-    parser::types::{FnSig, FunctionDef},
-    stdlib::{parse_fn_sigs, BUILTIN_FNS_DEFS},
-    type_checker::{FnInfo, TypeChecker},
-    var::Var,
+    circuit_writer::{CircuitWriter, VarInfo}, constants::{Field, Span}, error::Result, lexer::Token, parser::{types::{FnSig, FunctionDef}, ParserCtx}, type_checker::{FnInfo, TypeChecker}, var::Var
 };
 
 #[derive(Debug)]
@@ -22,7 +16,7 @@ pub struct Module<F> where F: Field {
 #[derive(Debug)]
 pub enum ModuleKind<F> where F: Field {
     /// A module that contains only built-in functions.
-    BuiltIn(BuiltinModule),
+    BuiltIn(BuiltinModule<F>),
 
     /// A module that contains both built-in functions and native functions.
     Native(TypeChecker<F>),
@@ -73,6 +67,23 @@ impl<F: Field> fmt::Debug for FnKind<F> {
     }
 }
 
-// static of built-in functions
-pub static BUILTIN_FNS: Lazy<HashMap<String, FnInfo>> =
-    Lazy::new(|| parse_fn_sigs(&BUILTIN_FNS_DEFS));
+
+const ASSERT_FN: &str = "assert(condition: Bool)";
+const ASSERT_EQ_FN: &str = "assert_eq(lhs: Field, rhs: Field)";
+
+#[derive(EnumIter)]
+pub enum BuiltInFunctions<F: Field> {
+    Assert(FnInfo<F>),
+    AssertEq(FnInfo<F>),
+}
+
+// TODO: this makes the code difficult to maintain. there are probably better ways to do this.
+impl<F: Field> BuiltInFunctions<F> {
+    pub fn fn_info(&self) -> &FnInfo<F> {
+        match self {
+            BuiltInFunctions::Assert(fn_info) => fn_info,
+            BuiltInFunctions::AssertEq(fn_info) => fn_info,
+        }
+    }
+}
+
