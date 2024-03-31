@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    circuit_writer::{KimchiBackend, ProvingBackend}, cli::packages::UserRepo, compiler::{compile, typecheck_next_file, Sources}, constants::KimchiField, type_checker::TypeChecker
+    backends::kimchi::KimchiBackend, circuit_writer::ProvingBackend, cli::packages::UserRepo, compiler::{compile, typecheck_next_file, Sources}, constants::KimchiField, type_checker::TypeChecker
 };
 
 //

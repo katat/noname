@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::Path};
 
 use crate::{
-    circuit_writer::{KimchiBackend, ProvingBackend}, compiler::{compile, typecheck_next_file, Sources}, constants::{Field, KimchiField}, inputs::{parse_inputs, ExtField}, prover::compile_to_indexes, type_checker::TypeChecker
+    backends::kimchi::KimchiBackend, circuit_writer::ProvingBackend, compiler::{compile, typecheck_next_file, Sources}, constants::{Field, KimchiField}, inputs::{parse_inputs, ExtField}, prover::compile_to_indexes, type_checker::TypeChecker
 };
 
 fn test_file(

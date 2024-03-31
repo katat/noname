@@ -3,7 +3,7 @@ use std::vec;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    circuit_writer::{CircuitWriter, FnEnv, VarInfo}, constants::{Field, Span}, error::Result, helpers::PrettyField, type_checker::ConstInfo, witness::{CompiledCircuit, WitnessEnv}
+    backends::Backend, circuit_writer::{CircuitWriter, FnEnv, VarInfo}, constants::{Field, Span}, error::Result, helpers::PrettyField, type_checker::ConstInfo, witness::{CompiledCircuit, WitnessEnv}
 };
 
 /// An internal variable that relates to a specific cell (of the execution trace),
@@ -28,15 +28,15 @@ impl CellVar {
 }
 
 /// The signature of a hint function
-pub type HintFn<F: Field> = dyn Fn(&CompiledCircuit<F>, &mut WitnessEnv<F>) -> Result<F>;
+pub type HintFn<F: Field, B: Backend<F>> = dyn Fn(&CompiledCircuit<F, B>, &mut WitnessEnv<F>) -> Result<F>;
 
 /// A variable's actual value in the witness can be computed in different ways.
 #[derive(Serialize, Deserialize)]
-pub enum Value<F> where F: Field {
+pub enum Value<F, B> where F: Field, B: Backend<F> {
     /// Either it's a hint and can be computed from the outside.
     #[serde(skip)]
     // TODO: outch, remove hints? or https://docs.rs/serde_closure/latest/serde_closure/ ?
-    Hint(Box<HintFn<F>>),
+    Hint(Box<HintFn<F, B>>),
 
     /// Or it's a constant (for example, I wrote `2` in the code).
     #[serde(skip)]
@@ -65,13 +65,13 @@ pub enum Value<F> where F: Field {
     PublicOutput(Option<CellVar>),
 }
 
-impl<F: Field> From<F> for Value<F> {
+impl<F: Field, B: Backend<F>> From<F> for Value<F, B> {
     fn from(field: F) -> Self {
         Self::Constant(field)
     }
 }
 
-impl<F: Field> std::fmt::Debug for Value<F> {
+impl<F: Field, B: Backend<F>> std::fmt::Debug for Value<F, B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Hint(..) => write!(f, "Hint"),
@@ -227,7 +227,7 @@ pub enum VarOrRef<F> where F: Field {
     },
 }
 
-impl<F: Field + PrettyField> VarOrRef<F> {
+impl<F: Field + PrettyField, B: Backend<F>> VarOrRef<F> {
     pub(crate) fn constant(&self) -> Option<F> {
         match self {
             VarOrRef::Var(var) => var.constant(),
@@ -238,7 +238,7 @@ impl<F: Field + PrettyField> VarOrRef<F> {
     /// Returns the value within the variable or pointer.
     /// If it is a pointer, we lose information about the original variable,
     /// thus calling this function is aking to passing the variable by value.
-    pub(crate) fn value(self, circuit_writer: &CircuitWriter<F>, fn_env: &FnEnv<F>) -> Var<F> {
+    pub(crate) fn value(self, circuit_writer: &CircuitWriter<F, B>, fn_env: &FnEnv<F>) -> Var<F> {
         match self {
             VarOrRef::Var(var) => var,
             VarOrRef::Ref {

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    backends::{kimchi::KimchiBackend, r1cs::R1CSBackend}, circuit_writer::writer::{AnnotatedCell, Cell}, constants::{Field, Span, NUM_REGISTERS}, error::{Error, ErrorKind, Result}, helpers::PrettyField, parser::{
+    backends::{kimchi::KimchiBackend, r1cs::R1CSBackend, Backend}, circuit_writer::writer::{AnnotatedCell, Cell}, constants::{Field, Span, NUM_REGISTERS}, constraints::{BooleanConstraints, FieldConstraints}, error::{Error, ErrorKind, Result}, helpers::PrettyField, parser::{
         types::{AttributeKind, FnArg, TyKind},
         Expr,
     }, type_checker::{ConstInfo, FnInfo, FullyQualified, StructInfo, TypeChecker}, var::{CellVar, Value, Var}, witness::CompiledCircuit
@@ -32,14 +32,14 @@ pub enum ProvingBackend<F: Field> {
 
 //#[derive(Debug, Serialize, Deserialize)]
 #[derive(Debug)]
-pub struct CircuitWriter<F> where F: Field {
+pub struct CircuitWriter<F, B> where F: Field, B: Backend<F> {
     /// The type checker state for the main module.
     // Important: this field must not be used directly.
     // This is because, depending on the value of [current_module],
     // the type checker state might be this one, or one of the ones in [dependencies].
     typed: TypeChecker<F>,
 
-    pub proving_backend: ProvingBackend<F>,
+    pub backend: B,
 
     /// Once this is set, you can generate a witness (and can't modify the circuit?)
     // Note: I don't think we need this, but it acts as a nice redundant failsafe.
@@ -88,7 +88,7 @@ pub struct DebugInfo {
     pub note: String,
 }
 
-impl<F: Field + PrettyField> CircuitWriter<F> {
+impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
     pub fn expr_type(&self, expr: &Expr) -> Option<&TyKind> {
         self.typed.expr_type(expr)
     }
@@ -154,12 +154,12 @@ impl<F: Field + PrettyField> CircuitWriter<F> {
     }
 }
 
-impl<F: Field + PrettyField> CircuitWriter<F> {
+impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
     /// Creates a global environment from the one created by the type checker.
     fn new(typed: TypeChecker<F>, backend: ProvingBackend<F>) -> Self {
         Self {
             typed,
-            proving_backend: backend,
+            backend,
             finalized: false,
             next_variable: 0,
             witness_vars: HashMap::new(),
@@ -251,7 +251,7 @@ impl<F: Field + PrettyField> CircuitWriter<F> {
         // compile function
         circuit_writer.compile_main_function(fn_env, &function)?;
 
-        match circuit_writer.proving_backend {
+        match circuit_writer.backend {
             ProvingBackend::Kimchi(mut backend) => {
                 // important: there might still be a pending generic gate
                 if let Some(pending) = backend.pending_generic_gate.take() {

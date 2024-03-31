@@ -3,7 +3,7 @@
 use std::{iter::once, str::FromStr};
 
 use crate::{
-    circuit_writer::Wiring, compiler::{generate_witness, Sources}, constants::{Field, KimchiField}, helpers::PrettyField, inputs::JsonInputs, witness::CompiledCircuit
+    backends::kimchi::KimchiBackend, circuit_writer::Wiring, compiler::{generate_witness, Sources}, constants::{Field, KimchiField}, helpers::PrettyField, inputs::JsonInputs, witness::CompiledCircuit
 };
 
 use ark_ff::SquareRootField;
@@ -47,7 +47,7 @@ static GROUP_MAP: Lazy<<Curve as CommitmentCurve>::Map> =
 //#[derive(Serialize, Deserialize)]
 pub struct ProverIndex {
     index: kimchi::prover_index::ProverIndex<Curve, OpeningProof<Curve>>,
-    compiled_circuit: CompiledCircuit<KimchiField>,
+    compiled_circuit: CompiledCircuit<KimchiField, KimchiBackend<KimchiField>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -60,7 +60,7 @@ pub struct VerifierIndex {
 //
 
 pub fn compile_to_indexes(
-    compiled_circuit: CompiledCircuit<KimchiField>,
+    compiled_circuit: CompiledCircuit<KimchiField, KimchiBackend<KimchiField>>,
 ) -> miette::Result<(ProverIndex, VerifierIndex)> {
     // convert gates to kimchi gates
     let mut gates: Vec<_> = compiled_circuit

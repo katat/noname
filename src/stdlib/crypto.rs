@@ -81,7 +81,7 @@ pub fn poseidon<F: Field + FromStr + PrettyField>(
     vars: &[VarInfo<F>],
     span: Span,
 ) -> Result<Option<Var<F>>> {
-    match compiler.proving_backend {
+    match compiler.backend {
         ProvingBackend::Kimchi(mut backend) => {
             //
             // sanity checks

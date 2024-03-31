@@ -11,8 +11,11 @@ use crate::{
     constants::{Span, NUM_REGISTERS},
     constraints::{BooleanConstraints, FieldConstraints},
     helpers::PrettyField,
+    imports::BuiltInFunctions,
     var::{CellVar, ConstOrCell, Value, Var},
 };
+
+use super::Backend;
 
 #[derive(Debug)]
 pub struct KimchiBackend<F>
@@ -139,10 +142,10 @@ impl<F: Field> KimchiBackend<F> {
     }
 }
 
-impl<F: Field + PrettyField> BooleanConstraints<F> for KimchiBackend<F> {
+impl<F: Field + PrettyField, B: Backend<F>> BooleanConstraints<F, B> for KimchiBackend<F> {
     fn check(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F>,
+        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         xx: &crate::var::ConstOrCell<F>,
         span: Span,
     ) {
@@ -163,7 +166,7 @@ impl<F: Field + PrettyField> BooleanConstraints<F> for KimchiBackend<F> {
 
     fn and(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F>,
+        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         lhs: &crate::var::ConstOrCell<F>,
         rhs: &crate::var::ConstOrCell<F>,
         span: Span,
@@ -207,7 +210,7 @@ impl<F: Field + PrettyField> BooleanConstraints<F> for KimchiBackend<F> {
 
     fn not(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F>,
+        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         var: &crate::var::ConstOrCell<F>,
         span: Span,
     ) -> crate::var::Var<F> {
@@ -244,7 +247,7 @@ impl<F: Field + PrettyField> BooleanConstraints<F> for KimchiBackend<F> {
 
     fn or(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F>,
+        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         lhs: &crate::var::ConstOrCell<F>,
         rhs: &crate::var::ConstOrCell<F>,
         span: Span,
@@ -256,10 +259,10 @@ impl<F: Field + PrettyField> BooleanConstraints<F> for KimchiBackend<F> {
     }
 }
 
-impl<F: Field + PrettyField> FieldConstraints<F> for KimchiBackend<F> {
+impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBackend<F> {
     fn add(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F>,
+        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         lhs: &ConstOrCell<F>,
         rhs: &ConstOrCell<F>,
         span: Span,
@@ -316,7 +319,7 @@ impl<F: Field + PrettyField> FieldConstraints<F> for KimchiBackend<F> {
 
     fn sub(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F>,
+        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         lhs: &ConstOrCell<F>,
         rhs: &ConstOrCell<F>,
         span: Span,
@@ -401,7 +404,7 @@ impl<F: Field + PrettyField> FieldConstraints<F> for KimchiBackend<F> {
 
     fn mul(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F>,
+        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         lhs: &ConstOrCell<F>,
         rhs: &ConstOrCell<F>,
         span: Span,
@@ -411,7 +414,9 @@ impl<F: Field + PrettyField> FieldConstraints<F> for KimchiBackend<F> {
 
         match (lhs, rhs) {
             // 2 constants
-            (ConstOrCell::Const(lhs), ConstOrCell::Const(rhs)) => Var::new_constant(*lhs * *rhs, span),
+            (ConstOrCell::Const(lhs), ConstOrCell::Const(rhs)) => {
+                Var::new_constant(*lhs * *rhs, span)
+            }
 
             // const and a var
             (ConstOrCell::Const(cst), ConstOrCell::Cell(cvar))
@@ -461,7 +466,7 @@ impl<F: Field + PrettyField> FieldConstraints<F> for KimchiBackend<F> {
 
     fn equal(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F>,
+        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         lhs: &Var<F>,
         rhs: &Var<F>,
         span: Span,
@@ -493,7 +498,7 @@ impl<F: Field + PrettyField> FieldConstraints<F> for KimchiBackend<F> {
 
     fn equal_cells(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F>,
+        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         x1: &ConstOrCell<F>,
         x2: &ConstOrCell<F>,
         span: Span,
@@ -618,7 +623,7 @@ impl<F: Field + PrettyField> FieldConstraints<F> for KimchiBackend<F> {
 
     fn if_else(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F>,
+        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         cond: &Var<F>,
         then_: &Var<F>,
         else_: &Var<F>,
@@ -641,7 +646,7 @@ impl<F: Field + PrettyField> FieldConstraints<F> for KimchiBackend<F> {
 
     fn if_else_inner(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F>,
+        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         cond: &ConstOrCell<F>,
         then_: &ConstOrCell<F>,
         else_: &ConstOrCell<F>,

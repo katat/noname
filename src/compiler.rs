@@ -9,7 +9,7 @@ use std::{collections::HashMap, str::FromStr};
 use miette::NamedSource;
 
 use crate::{
-    circuit_writer::{CircuitWriter, ProvingBackend}, cli::packages::UserRepo, constants::Field, error::Result, helpers::PrettyField, inputs::JsonInputs, lexer::Token, name_resolution::NAST, parser::AST, type_checker::TypeChecker, witness::{CompiledCircuit, Witness}
+    backends::Backend, circuit_writer::{CircuitWriter, ProvingBackend}, cli::packages::UserRepo, constants::Field, error::Result, helpers::PrettyField, inputs::JsonInputs, lexer::Token, name_resolution::NAST, parser::AST, type_checker::TypeChecker, witness::{CompiledCircuit, Witness}
 };
 
 /// Contains the association between a counter and the corresponding filename and source code.
@@ -134,16 +134,16 @@ pub fn get_nast<F: Field + FromStr>(
     Ok((nast, new_node_id))
 }
 
-pub fn compile<F: Field + PrettyField>(
+pub fn compile<F: Field + PrettyField, B: Backend<F>>(
     sources: &Sources,
     tast: TypeChecker<F>,
-    backend: ProvingBackend<F>,
-) -> miette::Result<CompiledCircuit<F>> {
+    backend: B,
+) -> miette::Result<CompiledCircuit<F, B>> {
     CircuitWriter::generate_circuit(tast, backend).into_miette(sources)
 }
 
-pub fn generate_witness<F: Field + PrettyField>(
-    compiled_circuit: &CompiledCircuit<F>,
+pub fn generate_witness<F: Field + PrettyField, B: Backend<F>>(
+    compiled_circuit: &CompiledCircuit<F, B>,
     sources: &Sources,
     public_inputs: JsonInputs,
     private_inputs: JsonInputs,

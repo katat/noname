@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use ark_ff::PrimeField; // Add this import
 
 use crate::{
-    circuit_writer::{CircuitWriter, DebugInfo, FnEnv, VarInfo}, constants::{Field, Span, NUM_REGISTERS}, constraints::{boolean, field}, error::{ErrorKind, Result}, helpers::PrettyField, imports::FnKind, parser::{
+    backends::Backend, circuit_writer::{CircuitWriter, DebugInfo, FnEnv, VarInfo}, constants::{Field, Span, NUM_REGISTERS}, constraints::{boolean, field}, error::{ErrorKind, Result}, helpers::PrettyField, imports::FnKind, parser::{
         types::{FunctionDef, Stmt, StmtKind, TyKind},
         Expr, ExprKind, Op2,
     }, syntax::is_type, type_checker::FullyQualified, var::{CellVar, ConstOrCell, Value, Var, VarOrRef}
@@ -111,14 +111,14 @@ impl Ord for AnnotatedCell {
 // Circuit Writer (also used by witness generation)
 //
 
-impl<F: Field + PrettyField> CircuitWriter<F> {
+impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
     /// Returns the compiled gates of the circuit.
     pub fn compiled_gates(&self) -> &[Gate<F>] {
         if !self.finalized {
             unreachable!();
         }
 
-        match &self.proving_backend {
+        match &self.backend {
             ProvingBackend::Kimchi(backend) => &backend.gates,
             ProvingBackend::R1CS(_) => todo!(),
         }
@@ -730,14 +730,14 @@ impl<F: Field + PrettyField> CircuitWriter<F> {
     }
 
     pub fn num_gates(&self) -> usize {
-        match &self.proving_backend {
+        match &self.backend {
             ProvingBackend::Kimchi(backend) => backend.gates.len(),
             ProvingBackend::R1CS(_) => todo!(),
         }
     }
 
     pub fn rows_of_vars(&self) -> Vec<Vec<Option<CellVar>>> {
-        match &self.proving_backend {
+        match &self.backend {
             ProvingBackend::Kimchi(backend) => backend.rows_of_vars,
             ProvingBackend::R1CS(_) => todo!(),
         }
@@ -761,7 +761,7 @@ impl<F: Field + PrettyField> CircuitWriter<F> {
 
         let zero = F::zero();
 
-        match &self.proving_backend {
+        match &self.backend {
             ProvingBackend::Kimchi(backend) => {
                 backend.add_generic_gate(
                     label.unwrap_or("hardcode a constant"),
@@ -785,7 +785,7 @@ impl<F: Field + PrettyField> CircuitWriter<F> {
             let cvar = self.new_internal_var(Value::External(name.clone(), idx), span);
             cvars.push(ConstOrCell::Cell(cvar));
 
-            match &self.proving_backend {
+            match &self.backend {
                 ProvingBackend::Kimchi(backend) => {
                     // create the associated generic gate
                     backend.add_gate(
@@ -815,7 +815,7 @@ impl<F: Field + PrettyField> CircuitWriter<F> {
             let cvar = self.new_internal_var(Value::PublicOutput(None), span);
             cvars.push(ConstOrCell::Cell(cvar));
 
-            match &self.proving_backend {
+            match &self.backend {
                 ProvingBackend::Kimchi(backend) => {
                     // create the associated generic gate
                     backend.add_generic_gate(

@@ -31,7 +31,7 @@ pub fn add<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, lhs: &ConstO
                 compiler.new_internal_var(Value::LinearCombination(vec![(one, *cvar)], *cst), span);
 
             // add constraint based on backend type
-            match compiler.proving_backend {
+            match compiler.backend {
                 ProvingBackend::Kimchi(mut backend) => {
                     backend.add_generic_gate(
                         "add a constant with a variable",
@@ -56,7 +56,7 @@ pub fn add<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, lhs: &ConstO
             );
 
             // add constraint based on backend type
-            match compiler.proving_backend {
+            match compiler.backend {
                 ProvingBackend::Kimchi(mut backend) => {
                     backend.add_generic_gate(
                         "add two variables together",

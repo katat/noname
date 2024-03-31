@@ -4,7 +4,7 @@ use ark_ff::{One as _, Zero};
 use once_cell::sync::Lazy;
 
 use crate::{
-    circuit_writer::{CircuitWriter, VarInfo}, constants::{Field, KimchiField, Span}, error::{Error, ErrorKind, Result}, helpers::PrettyField, imports::{BuiltInFunctions, BuiltinModule, FnHandle, FnKind}, lexer::Token, parser::{
+    backends::Backend, circuit_writer::{CircuitWriter, VarInfo}, constants::{Field, KimchiField, Span}, error::{Error, ErrorKind, Result}, helpers::PrettyField, imports::{BuiltInFunctions, BuiltinModule, FnHandle, FnKind}, lexer::Token, parser::{
         types::{FnSig, TyKind},
         ParserCtx,
     }, type_checker::FnInfo, var::{ConstOrCell, Var}
@@ -76,7 +76,7 @@ const ASSERT_FN: &str = "assert(condition: Bool)";
 const ASSERT_EQ_FN: &str = "assert_eq(lhs: Field, rhs: Field)";
 
 /// Asserts that two vars are equal.
-fn assert_eq<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], span: Span) -> Result<Option<Var<F>>> {
+fn assert_eq<F: Field + PrettyField, B: Backend<F>>(compiler: &mut CircuitWriter<F, B>, vars: &[VarInfo<F>], span: Span) -> Result<Option<Var<F>>> {
     // we get two vars
     assert_eq!(vars.len(), 2);
     let lhs_info = &vars[0];
@@ -149,7 +149,7 @@ fn assert_eq<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, vars: &[Va
 }
 
 /// Asserts that a condition is true.
-fn assert<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], span: Span) -> Result<Option<Var<F>>> {
+fn assert<F: Field + PrettyField, B: Backend<F>>(compiler: &mut CircuitWriter<F, B>, vars: &[VarInfo<F>], span: Span) -> Result<Option<Var<F>>> {
     // we get a single var
     assert_eq!(vars.len(), 1);
 

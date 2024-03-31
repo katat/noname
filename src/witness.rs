@@ -5,14 +5,7 @@ use itertools::{chain, izip, Itertools};
 //use serde::{Deserialize, Serialize};
 
 use crate::{
-    circuit_writer::{CircuitWriter, Gate},
-    compiler::Sources,
-    constants::{Field, NUM_REGISTERS},
-    error::{Error, ErrorKind, Result},
-    helpers::{self, PrettyField},
-    inputs::JsonInputs,
-    type_checker::FnInfo,
-    var::{CellVar, Value},
+    backends::Backend, circuit_writer::{CircuitWriter, Gate}, compiler::Sources, constants::{Field, NUM_REGISTERS}, error::{Error, ErrorKind, Result}, helpers::{self, PrettyField}, inputs::JsonInputs, type_checker::FnInfo, var::{CellVar, Value}
 };
 
 #[derive(Debug, Default)]
@@ -67,12 +60,12 @@ impl<F: Field + helpers::PrettyField> Witness<F> {
 
 /// The compiled circuit.
 //#[derive(Serialize, Deserialize)]
-pub struct CompiledCircuit<F> where F: Field {
-    pub circuit: CircuitWriter<F>,
+pub struct CompiledCircuit<F, B> where F: Field, B: Backend<F> {
+    pub circuit: CircuitWriter<F, B>,
 }
 
-impl<F: Field + FromStr + PrettyField> CompiledCircuit<F> {
-    pub(crate) fn new(circuit: CircuitWriter<F>) -> Self {
+impl<F: Field + FromStr + PrettyField, B: Backend<F>> CompiledCircuit<F, B> {
+    pub(crate) fn new(circuit: CircuitWriter<F, B>) -> Self {
         Self { circuit }
     }
 
