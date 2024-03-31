@@ -1,7 +1,7 @@
+use std::collections::HashMap;
+
 use crate::{
-    cli::packages::UserRepo,
-    compiler::{compile, typecheck_next_file, Sources},
-    type_checker::TypeChecker,
+    circuit_writer::{KimchiBackend, ProvingBackend}, cli::packages::UserRepo, compiler::{compile, typecheck_next_file, Sources}, constants::KimchiField, type_checker::TypeChecker
 };
 
 //
@@ -85,7 +85,7 @@ fn test_simple_module() -> miette::Result<()> {
     let mut sources = Sources::new();
 
     // parse the transitive dependency
-    let mut tast = TypeChecker::new();
+    let mut tast: TypeChecker<KimchiField> = TypeChecker::new();
     let mut node_id = 0;
     node_id = typecheck_next_file(
         &mut tast,
@@ -116,8 +116,16 @@ fn test_simple_module() -> miette::Result<()> {
         node_id,
     )?;
 
+    let kimchi_backend = KimchiBackend {
+        gates: vec![],
+        wiring: HashMap::new(),
+        double_generic_gate_optimization: false,
+        pending_generic_gate: None,
+        rows_of_vars: vec!(),
+        debug_info: vec!(),
+    };
     // compile
-    compile(&sources, tast, false)?;
+    compile(&sources, tast, ProvingBackend::Kimchi(kimchi_backend))?;
 
     Ok(())
 }

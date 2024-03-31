@@ -8,7 +8,7 @@ use num_bigint::BigUint;
 use thiserror::Error;
 
 use crate::{
-    constants::Field, parser::types::TyKind, type_checker::FullyQualified, witness::CompiledCircuit,
+    constants::Field, helpers::PrettyField, parser::types::TyKind, type_checker::FullyQualified, witness::CompiledCircuit
 };
 
 //
@@ -48,7 +48,7 @@ pub fn parse_inputs(s: &str) -> Result<JsonInputs, ParsingError> {
 // JSON deserialization of a single input
 //
 
-impl<F: Field> CompiledCircuit<F> {
+impl<F: Field + FromStr + PrettyField> CompiledCircuit<F> {
     pub fn parse_single_input(
         &self,
         input: serde_json::Value,
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn test_extfield() {
-        let field = Field::from(42);
+        let field = kimchi::mina_curves::pasta::Fp::from(42);
         assert_eq!(field.to_dec_string(), "42");
     }
 }

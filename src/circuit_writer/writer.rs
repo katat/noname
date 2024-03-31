@@ -12,19 +12,13 @@ use serde::{Deserialize, Serialize};
 use ark_ff::PrimeField; // Add this import
 
 use crate::{
-    circuit_writer::{CircuitWriter, DebugInfo, FnEnv, VarInfo},
-    constants::{Field, Span, NUM_REGISTERS},
-    constraints::{boolean, field},
-    error::{ErrorKind, Result},
-    imports::FnKind,
-    parser::{
+    circuit_writer::{CircuitWriter, DebugInfo, FnEnv, VarInfo}, constants::{Field, Span, NUM_REGISTERS}, constraints::{boolean, field}, error::{ErrorKind, Result}, helpers::PrettyField, imports::FnKind, parser::{
         types::{FunctionDef, Stmt, StmtKind, TyKind},
         Expr, ExprKind, Op2,
-    },
-    syntax::is_type,
-    type_checker::FullyQualified,
-    var::{CellVar, ConstOrCell, Value, Var, VarOrRef},
+    }, syntax::is_type, type_checker::FullyQualified, var::{CellVar, ConstOrCell, Value, Var, VarOrRef}
 };
+
+use super::ProvingBackend;
 
 //
 // Data structures
@@ -117,13 +111,17 @@ impl Ord for AnnotatedCell {
 // Circuit Writer (also used by witness generation)
 //
 
-impl<F: Field> CircuitWriter<F> {
+impl<F: Field + PrettyField> CircuitWriter<F> {
     /// Returns the compiled gates of the circuit.
     pub fn compiled_gates(&self) -> &[Gate<F>] {
         if !self.finalized {
             unreachable!();
         }
-        &self.gates
+
+        match &self.proving_backend {
+            ProvingBackend::Kimchi(backend) => &backend.gates,
+            ProvingBackend::R1CS(_) => todo!(),
+        }
     }
 
     fn compile_stmt(&mut self, fn_env: &mut FnEnv<F>, stmt: &Stmt) -> Result<Option<VarOrRef<F>>> {
@@ -732,7 +730,17 @@ impl<F: Field> CircuitWriter<F> {
     }
 
     pub fn num_gates(&self) -> usize {
-        self.gates.len()
+        match &self.proving_backend {
+            ProvingBackend::Kimchi(backend) => backend.gates.len(),
+            ProvingBackend::R1CS(_) => todo!(),
+        }
+    }
+
+    pub fn rows_of_vars(&self) -> Vec<Vec<Option<CellVar>>> {
+        match &self.proving_backend {
+            ProvingBackend::Kimchi(backend) => backend.rows_of_vars,
+            ProvingBackend::R1CS(_) => todo!(),
+        }
     }
 
     // TODO: we should cache constants to avoid creating a new variable for each constant
@@ -752,69 +760,21 @@ impl<F: Field> CircuitWriter<F> {
         self.cached_constants.insert(value, var);
 
         let zero = F::zero();
-        self.add_generic_gate(
-            label.unwrap_or("hardcode a constant"),
-            vec![Some(var)],
-            vec![F::one(), zero, zero, zero, value.neg()],
-            span,
-        );
+
+        match &self.proving_backend {
+            ProvingBackend::Kimchi(backend) => {
+                backend.add_generic_gate(
+                    label.unwrap_or("hardcode a constant"),
+                    vec![Some(var)],
+                    vec![F::one(), zero, zero, zero, value.neg()],
+                    span,
+                );
+            }
+            ProvingBackend::R1CS(_) => todo!(),
+            
+        };
 
         var
-    }
-
-    /// creates a new gate, and the associated row in the witness/execution trace.
-    // TODO: add_gate instead of gates?
-    pub fn add_gate(
-        &mut self,
-        note: &'static str,
-        typ: GateKind,
-        vars: Vec<Option<CellVar>>,
-        coeffs: Vec<F>,
-        span: Span,
-    ) {
-        // sanitize
-        assert!(coeffs.len() <= NUM_REGISTERS);
-        assert!(vars.len() <= NUM_REGISTERS);
-
-        // construct the execution trace with vars, for the witness generation
-        self.rows_of_vars.push(vars.clone());
-
-        // get current row
-        // important: do that before adding the gate below
-        let row = self.gates.len();
-
-        // add gate
-        self.gates.push(Gate { typ, coeffs });
-
-        // add debug info related to that gate
-        let debug_info = DebugInfo {
-            span,
-            note: note.to_string(),
-        };
-        self.debug_info.push(debug_info.clone());
-
-        // wiring (based on vars)
-        for (col, var) in vars.iter().enumerate() {
-            if let Some(var) = var {
-                let curr_cell = Cell { row, col };
-                let annotated_cell = AnnotatedCell {
-                    cell: curr_cell,
-                    debug: debug_info.clone(),
-                };
-
-                self.wiring
-                    .entry(var.index)
-                    .and_modify(|w| match w {
-                        Wiring::NotWired(old_cell) => {
-                            *w = Wiring::Wired(vec![old_cell.clone(), annotated_cell.clone()])
-                        }
-                        Wiring::Wired(ref mut cells) => {
-                            cells.push(annotated_cell.clone());
-                        }
-                    })
-                    .or_insert(Wiring::NotWired(annotated_cell));
-            }
-        }
     }
 
     pub fn add_public_inputs(&mut self, name: String, num: usize, span: Span) -> Var<F> {
@@ -825,14 +785,20 @@ impl<F: Field> CircuitWriter<F> {
             let cvar = self.new_internal_var(Value::External(name.clone(), idx), span);
             cvars.push(ConstOrCell::Cell(cvar));
 
-            // create the associated generic gate
-            self.add_gate(
-                "add public input",
-                GateKind::DoubleGeneric,
-                vec![Some(cvar)],
-                vec![F::one()],
-                span,
-            );
+            match &self.proving_backend {
+                ProvingBackend::Kimchi(backend) => {
+                    // create the associated generic gate
+                    backend.add_gate(
+                        "add public input",
+                        GateKind::DoubleGeneric,
+                        vec![Some(cvar)],
+                        vec![F::one()],
+                        span,
+                    );
+                }
+                ProvingBackend::R1CS(_) => todo!(),
+                
+            }
         }
 
         self.public_input_size += num;
@@ -849,13 +815,18 @@ impl<F: Field> CircuitWriter<F> {
             let cvar = self.new_internal_var(Value::PublicOutput(None), span);
             cvars.push(ConstOrCell::Cell(cvar));
 
-            // create the associated generic gate
-            self.add_generic_gate(
-                "add public output",
-                vec![Some(cvar)],
-                vec![F::one()],
-                span,
-            );
+            match &self.proving_backend {
+                ProvingBackend::Kimchi(backend) => {
+                    // create the associated generic gate
+                    backend.add_generic_gate(
+                        "add public output",
+                        vec![Some(cvar)],
+                        vec![F::one()],
+                        span,
+                    );
+                }
+                ProvingBackend::R1CS(_) => todo!(),
+            }
         }
         self.public_input_size += num;
 
@@ -875,45 +846,6 @@ impl<F: Field> CircuitWriter<F> {
         }
 
         Var::new(cvars, span)
-    }
-
-    pub(crate) fn add_generic_gate(
-        &mut self,
-        label: &'static str,
-        mut vars: Vec<Option<CellVar>>,
-        mut coeffs: Vec<F>,
-        span: Span,
-    ) {
-        // padding
-        let coeffs_padding = GENERIC_COEFFS.checked_sub(coeffs.len()).unwrap();
-        coeffs.extend(std::iter::repeat(F::zero()).take(coeffs_padding));
-
-        let vars_padding = GENERIC_REGISTERS.checked_sub(vars.len()).unwrap();
-        vars.extend(std::iter::repeat(None).take(vars_padding));
-
-        // if the double gate optimization is not set, just add the gate
-        if !self.double_generic_gate_optimization {
-            self.add_gate(label, GateKind::DoubleGeneric, vars, coeffs, span);
-            return;
-        }
-
-        // only add a double generic gate if we have two of them
-        if let Some(generic_gate) = self.pending_generic_gate.take() {
-            coeffs.extend(generic_gate.coeffs);
-            vars.extend(generic_gate.vars);
-
-            // TODO: what to do with the label and span?
-
-            self.add_gate(label, GateKind::DoubleGeneric, vars, coeffs, span);
-        } else {
-            // otherwise queue it
-            self.pending_generic_gate = Some(PendingGate {
-                label,
-                coeffs,
-                vars,
-                span,
-            });
-        }
     }
 }
 

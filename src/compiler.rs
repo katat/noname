@@ -4,21 +4,12 @@
 //! It does that by transforming our [Error] type into a [miette::Error] type for all functions here.
 //! (via the [IntoMiette] trait that we define here.)
 
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use miette::NamedSource;
 
 use crate::{
-    circuit_writer::{CircuitWriter, ProvingBackend},
-    cli::packages::UserRepo,
-    constants::Field,
-    error::Result,
-    inputs::JsonInputs,
-    lexer::Token,
-    name_resolution::NAST,
-    parser::AST,
-    type_checker::TypeChecker,
-    witness::{CompiledCircuit, Witness},
+    circuit_writer::{CircuitWriter, ProvingBackend}, cli::packages::UserRepo, constants::Field, error::Result, helpers::PrettyField, inputs::JsonInputs, lexer::Token, name_resolution::NAST, parser::AST, type_checker::TypeChecker, witness::{CompiledCircuit, Witness}
 };
 
 /// Contains the association between a counter and the corresponding filename and source code.
@@ -79,7 +70,7 @@ impl<T> IntoMiette<T> for Result<T> {
     }
 }
 
-pub fn typecheck_next_file<F: Field>(
+pub fn typecheck_next_file<F: Field + PrettyField>(
     typechecker: &mut TypeChecker<F>,
     this_module: Option<UserRepo>,
     sources: &mut Sources,
@@ -92,7 +83,7 @@ pub fn typecheck_next_file<F: Field>(
 }
 
 /// This should not be used directly. Check [get_tast] instead.
-pub fn typecheck_next_file_inner<F: Field>(
+pub fn typecheck_next_file_inner<F: Field + PrettyField>(
     typechecker: &mut TypeChecker<F>,
     this_module: Option<UserRepo>,
     sources: &mut Sources,
@@ -111,7 +102,7 @@ pub fn typecheck_next_file_inner<F: Field>(
     Ok(new_node_id)
 }
 
-pub fn get_nast<F: Field>(
+pub fn get_nast<F: Field + FromStr>(
     this_module: Option<UserRepo>,
     sources: &mut Sources,
     filename: String,
@@ -129,7 +120,7 @@ pub fn get_nast<F: Field>(
     }
 
     // parser
-    let (ast, new_node_id) = AST::parse(filename_id, tokens, node_id)?;
+    let (ast, new_node_id) = AST::<F>::parse(filename_id, tokens, node_id)?;
     if std::env::var("NONAME_VERBOSE").is_ok() {
         println!("parser succeeded");
     }
@@ -143,15 +134,15 @@ pub fn get_nast<F: Field>(
     Ok((nast, new_node_id))
 }
 
-pub fn compile<F: Field>(
+pub fn compile<F: Field + PrettyField>(
     sources: &Sources,
     tast: TypeChecker<F>,
-    backend: ProvingBackend,
+    backend: ProvingBackend<F>,
 ) -> miette::Result<CompiledCircuit<F>> {
     CircuitWriter::generate_circuit(tast, backend).into_miette(sources)
 }
 
-pub fn generate_witness<F: Field>(
+pub fn generate_witness<F: Field + PrettyField>(
     compiled_circuit: &CompiledCircuit<F>,
     sources: &Sources,
     public_inputs: JsonInputs,

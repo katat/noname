@@ -1,16 +1,10 @@
 use std::{collections::HashMap, str::FromStr};
 
 use crate::{
-    cli::packages::UserRepo,
-    constants::{Field, Span},
-    error::{Error, ErrorKind, Result},
-    imports::{BuiltInFunctions, FnKind},
-    name_resolution::NAST,
-    parser::{
+    cli::packages::UserRepo, constants::{Field, Span}, error::{Error, ErrorKind, Result}, helpers::PrettyField, imports::{BuiltInFunctions, FnKind}, name_resolution::NAST, parser::{
         types::{FuncOrMethod, FunctionDef, ModulePath, RootKind, Ty, TyKind},
         CustomType, Expr, StructDef,
-    },
-    stdlib::{CRYPTO_MODULE, QUALIFIED_BUILTINS},
+    }, stdlib::{crypto::CryptoFn, QUALIFIED_BUILTINS}
 };
 
 pub use checker::{FnInfo, StructInfo};
@@ -77,7 +71,7 @@ pub struct TypeChecker<F> where F: Field {
     node_types: HashMap<usize, TyKind>,
 }
 
-impl<F: Field> TypeChecker<F> {
+impl<F: Field + PrettyField> TypeChecker<F> {
     pub(crate) fn expr_type(&self, expr: &Expr) -> Option<&TyKind> {
         self.node_types.get(&expr.node_id)
     }
@@ -130,7 +124,7 @@ impl<F: Field> TypeChecker<F> {
     }
 }
 
-impl<F: Field> TypeChecker<F> {
+impl<F: Field + PrettyField> TypeChecker<F> {
     // TODO: we can probably lazy const this
     pub fn new() -> Self {
         let mut type_checker = Self {
@@ -142,8 +136,8 @@ impl<F: Field> TypeChecker<F> {
 
         // initialize it with the builtins
         let builtin_module = ModulePath::Absolute(UserRepo::new(QUALIFIED_BUILTINS));
-        for it in BuiltInFunctions::iter() {
-            let fn_info = it.fn_info();
+        for func in BuiltInFunctions::functions() {
+            let fn_info = func.fn_info();
 
             let qualified = FullyQualified::new(&builtin_module, &fn_info.sig().name.value);
             if type_checker
@@ -157,8 +151,9 @@ impl<F: Field> TypeChecker<F> {
 
         // initialize it with the standard library
         let crypto_module = ModulePath::Absolute(UserRepo::new("std/crypto"));
-        for (fn_name, fn_info) in CRYPTO_MODULE.functions.iter() {
-            let qualified = FullyQualified::new(&crypto_module, fn_name);
+        for func in CryptoFn::functions() {
+            let fn_info = func.fn_info();
+            let qualified = FullyQualified::new(&crypto_module, &fn_info.sig().name.value);
             if type_checker
                 .functions
                 .insert(qualified, fn_info.clone())

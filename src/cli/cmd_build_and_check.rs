@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
 use camino::Utf8PathBuf as PathBuf;
+use kimchi::mina_curves::pasta::Fp;
 use miette::{Context, IntoDiagnostic};
 
 use crate::{
-    circuit_writer::{KimchiBackend, ProvingBackend}, cli::packages::path_to_package, compiler::{compile, typecheck_next_file, Sources}, constants::Field, inputs::{parse_inputs, JsonInputs}, prover::{compile_to_indexes, ProverIndex, VerifierIndex}, type_checker::TypeChecker
+    circuit_writer::{KimchiBackend, ProvingBackend}, cli::packages::path_to_package, compiler::{compile, typecheck_next_file, Sources}, constants::Field, helpers::PrettyField, inputs::{parse_inputs, JsonInputs}, prover::{compile_to_indexes, ProverIndex, VerifierIndex}, type_checker::TypeChecker
 };
 
 use super::packages::{
@@ -102,14 +103,15 @@ pub fn cmd_check(args: CmdCheck) -> miette::Result<()> {
         .path
         .unwrap_or_else(|| std::env::current_dir().unwrap().try_into().unwrap());
 
+    // TODO: field type should be determined by a flag
     // produce all TASTs and stop here
-    produce_all_asts(&curr_dir)?;
+    produce_all_asts::<Fp>(&curr_dir)?;
 
     println!("all good!");
     Ok(())
 }
 
-fn produce_all_asts<F: Field>(path: &PathBuf) -> miette::Result<(Sources, TypeChecker<F>)> {
+fn produce_all_asts<F: Field + PrettyField>(path: &PathBuf) -> miette::Result<(Sources, TypeChecker<F>)> {
     // find manifest
     let manifest = validate_package_and_get_manifest(&path, false)?;
 
@@ -181,22 +183,23 @@ fn produce_all_asts<F: Field>(path: &PathBuf) -> miette::Result<(Sources, TypeCh
     Ok((sources, tast))
 }
 
-pub fn build<F: Field>(
+pub fn build(
     curr_dir: &PathBuf,
     asm: bool,
     debug: bool,
-) -> miette::Result<(Sources, ProverIndex<F>, VerifierIndex)> {
+) -> miette::Result<(Sources, ProverIndex, VerifierIndex)> {
     // produce all TASTs
     let (sources, tast) = produce_all_asts(curr_dir)?;
 
-    // produce indexes
+    // TODO: a backend should be initialized by a flag
     let kimchi_backend = KimchiBackend {
         gates: vec![],
         wiring: HashMap::new(),
         double_generic_gate_optimization: false,
         pending_generic_gate: None,
+        rows_of_vars: vec![],
+        debug_info: vec![],
     };
-    // let backend: ProvingBackend = ProvingBackend::Kimchi;
 
     let compiled_circuit = compile(&sources, tast, ProvingBackend::Kimchi(kimchi_backend))?;
 
@@ -270,7 +273,17 @@ pub fn cmd_test(args: CmdTest) -> miette::Result<()> {
         code,
         0,
     )?;
-    let compiled_circuit = compile(&sources, tast, !args.no_double)?;
+
+    // TODO: a backend should be initialized by a flag
+    let kimchi_backend = KimchiBackend {
+        gates: vec![],
+        wiring: HashMap::new(),
+        double_generic_gate_optimization: false,
+        pending_generic_gate: None,
+        rows_of_vars: vec![],
+        debug_info: vec![],
+    };
+    let compiled_circuit = compile(&sources, tast, ProvingBackend::Kimchi(kimchi_backend))?;
 
     let (prover_index, verifier_index) = compile_to_indexes(compiled_circuit)?;
     println!("successfully compiled");

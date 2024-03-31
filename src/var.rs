@@ -3,11 +3,7 @@ use std::vec;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    circuit_writer::{CircuitWriter, FnEnv, VarInfo},
-    constants::{Field, Span},
-    error::Result,
-    type_checker::ConstInfo,
-    witness::{CompiledCircuit, WitnessEnv},
+    circuit_writer::{CircuitWriter, FnEnv, VarInfo}, constants::{Field, Span}, error::Result, helpers::PrettyField, type_checker::ConstInfo, witness::{CompiledCircuit, WitnessEnv}
 };
 
 /// An internal variable that relates to a specific cell (of the execution trace),
@@ -231,7 +227,7 @@ pub enum VarOrRef<F> where F: Field {
     },
 }
 
-impl<F: Field> VarOrRef<F> {
+impl<F: Field + PrettyField> VarOrRef<F> {
     pub(crate) fn constant(&self) -> Option<F> {
         match self {
             VarOrRef::Var(var) => var.constant(),

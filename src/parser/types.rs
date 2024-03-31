@@ -1,5 +1,6 @@
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
 
+use kimchi::mina_curves::pasta::Fp;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -785,7 +786,7 @@ impl FunctionDef {
         let sig = FnSig::parse(ctx, tokens)?;
 
         // make sure that it doesn't shadow a builtin
-        if BuiltInFunctions::from_str(&sig.name.value).is_some() {
+        if BuiltInFunctions::<Fp>::from_str(&sig.name.value).is_ok() {
             return Err(ctx.error(
                 ErrorKind::ShadowingBuiltIn(sig.name.value.clone()),
                 sig.name.span,
@@ -1191,7 +1192,7 @@ pub struct ConstDef<F> where F: Field {
     pub span: Span,
 }
 
-impl<F: Field> ConstDef<F> {
+impl<F: Field + FromStr> ConstDef<F> {
     pub fn parse(ctx: &mut ParserCtx, tokens: &mut Tokens) -> Result<Self> {
         // const foo = 42;
         //       ^^^

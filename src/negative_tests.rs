@@ -1,7 +1,5 @@
 use crate::{
-    compiler::{typecheck_next_file_inner, Sources},
-    error::ErrorKind,
-    type_checker::TypeChecker,
+    compiler::{typecheck_next_file_inner, Sources}, constants::KimchiField, error::ErrorKind, type_checker::TypeChecker
 };
 
 #[test]
@@ -13,7 +11,7 @@ fn test_return() {
     }
     "#;
 
-    let mut tast = TypeChecker::new();
+    let mut tast: TypeChecker<KimchiField> = TypeChecker::new();
     let res = typecheck_next_file_inner(
         &mut tast,
         None,
@@ -35,7 +33,7 @@ fn test_return_expected() {
     }
     "#;
 
-    let mut tast = TypeChecker::new();
+    let mut tast: TypeChecker<KimchiField> = TypeChecker::new();
     let res = typecheck_next_file_inner(
         &mut tast,
         None,
@@ -57,7 +55,7 @@ fn test_return_mismatch() {
         }
         "#;
 
-    let mut tast = TypeChecker::new();
+    let mut tast: TypeChecker<KimchiField> = TypeChecker::new();
     let res = typecheck_next_file_inner(
         &mut tast,
         None,

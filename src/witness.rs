@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use ark_ff::{Field as _, Zero};
 use itertools::{chain, izip, Itertools};
@@ -9,7 +9,7 @@ use crate::{
     compiler::Sources,
     constants::{Field, NUM_REGISTERS},
     error::{Error, ErrorKind, Result},
-    helpers::{self, PrettyField as _},
+    helpers::{self, PrettyField},
     inputs::JsonInputs,
     type_checker::FnInfo,
     var::{CellVar, Value},
@@ -71,7 +71,7 @@ pub struct CompiledCircuit<F> where F: Field {
     pub circuit: CircuitWriter<F>,
 }
 
-impl<F: Field> CompiledCircuit<F> {
+impl<F: Field + FromStr + PrettyField> CompiledCircuit<F> {
     pub(crate) fn new(circuit: CircuitWriter<F>) -> Self {
         Self { circuit }
     }
@@ -198,7 +198,7 @@ impl<F: Field> CompiledCircuit<F> {
 
         let gates = self.circuit.compiled_gates();
         for (row, (gate, row_of_vars, debug_info)) in
-            izip!(gates, &self.circuit.rows_of_vars, &self.circuit.debug_info).enumerate()
+            izip!(gates, &self.circuit.rows_of_vars(), &self.circuit.debug_info).enumerate()
         {
             // create the witness row
             let mut witness_row = [F::zero(); NUM_REGISTERS];
@@ -269,7 +269,7 @@ impl<F: Field> CompiledCircuit<F> {
 
         // sanity checks
         assert_eq!(witness.len(), self.circuit.num_gates());
-        assert_eq!(witness.len(), self.circuit.rows_of_vars.len());
+        assert_eq!(witness.len(), self.circuit.rows_of_vars().len());
 
         // return the public output separately as well
         Ok((Witness(witness), full_public_inputs, public_output))

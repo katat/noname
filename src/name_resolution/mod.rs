@@ -72,6 +72,8 @@ impl<F: Field> NAST<F> {
 
 #[cfg(test)]
 mod tests {
+    use kimchi::mina_curves::pasta::Fp;
+
     use crate::{
         lexer::Token,
         parser::{
@@ -100,7 +102,7 @@ mod tests {
     #[test]
     fn test_name_res() {
         let tokens = Token::parse(0, CODE).unwrap();
-        let (ast, _node_id) = AST::parse(0, tokens, 0).unwrap();
+        let (ast, _node_id) = AST::<Fp>::parse(0, tokens, 0).unwrap();
         let nast = NAST::resolve_modules(None, ast).unwrap();
 
         // find constant declaration
@@ -147,7 +149,7 @@ mod tests {
         let user_repo = UserRepo::new("mimoo/example");
 
         let tokens = Token::parse(0, CODE).unwrap();
-        let (ast, _node_id) = AST::parse(0, tokens, 0).unwrap();
+        let (ast, _node_id) = AST::<Fp>::parse(0, tokens, 0).unwrap();
         let nast = NAST::resolve_modules(Some(user_repo.clone()), ast).unwrap();
 
         // find constant declaration

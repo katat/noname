@@ -1,5 +1,8 @@
 use std::str::FromStr;
 
+use ark_ff::Field;
+use kimchi::mina_curves::pasta::Fp;
+
 use crate::{
     cli::packages::UserRepo,
     error::Result,
@@ -24,7 +27,7 @@ impl NameResCtx {
                 fn_name,
                 args,
             } => {
-                if matches!(module, ModulePath::Local) && BuiltInFunctions::from_str(&fn_name.value).is_some()
+                if matches!(module, ModulePath::Local) && BuiltInFunctions::<Fp>::from_str(&fn_name.value).is_ok()
                 {
                     // if it's a builtin, use `std::builtin`
                     *module = ModulePath::Absolute(UserRepo::new(QUALIFIED_BUILTINS));

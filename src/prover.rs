@@ -1,15 +1,12 @@
 //! This module contains the prover.
 
-use std::iter::once;
+use std::{iter::once, str::FromStr};
 
 use crate::{
-    circuit_writer::Wiring,
-    compiler::{generate_witness, Sources},
-    constants::Field,
-    inputs::JsonInputs,
-    witness::CompiledCircuit,
+    circuit_writer::Wiring, compiler::{generate_witness, Sources}, constants::{Field, KimchiField}, helpers::PrettyField, inputs::JsonInputs, witness::CompiledCircuit
 };
 
+use ark_ff::SquareRootField;
 use itertools::chain;
 
 use kimchi::circuits::constraints::ConstraintSystem;
@@ -48,9 +45,9 @@ static GROUP_MAP: Lazy<<Curve as CommitmentCurve>::Map> =
 //
 
 //#[derive(Serialize, Deserialize)]
-pub struct ProverIndex<F> where F: Field {
+pub struct ProverIndex {
     index: kimchi::prover_index::ProverIndex<Curve, OpeningProof<Curve>>,
-    compiled_circuit: CompiledCircuit<F>,
+    compiled_circuit: CompiledCircuit<KimchiField>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -62,9 +59,9 @@ pub struct VerifierIndex {
 // Setup
 //
 
-pub fn compile_to_indexes<F: Field>(
-    compiled_circuit: CompiledCircuit<F>,
-) -> miette::Result<(ProverIndex<F>, VerifierIndex)> {
+pub fn compile_to_indexes(
+    compiled_circuit: CompiledCircuit<KimchiField>,
+) -> miette::Result<(ProverIndex, VerifierIndex)> {
     // convert gates to kimchi gates
     let mut gates: Vec<_> = compiled_circuit
         .compiled_gates()
@@ -135,7 +132,7 @@ pub fn compile_to_indexes<F: Field>(
 // Proving
 //
 
-impl<F: Field> ProverIndex<F> {
+impl ProverIndex {
     pub fn asm(&self, sources: &Sources, debug: bool) -> String {
         self.compiled_circuit.asm(sources, debug)
     }
@@ -157,8 +154,8 @@ impl<F: Field> ProverIndex<F> {
         debug: bool,
     ) -> miette::Result<(
         ProverProof<Curve, OpeningProof<Curve>>,
-        Vec<F>,
-        Vec<F>,
+        Vec<KimchiField>,
+        Vec<KimchiField>,
     )> {
         // generate the witness
         let (witness, full_public_inputs, public_output) = generate_witness(

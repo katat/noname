@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::{
     constants::{Field, Span},
     error::{Error, ErrorKind, Result},
@@ -97,7 +99,7 @@ impl ParserCtx {
 #[derive(Debug, Default)]
 pub struct AST<F: Field>(pub Vec<Root<F>>);
 
-impl<F: Field> AST<F> {
+impl<F: Field + FromStr> AST<F> {
     pub fn parse(filename_id: usize, mut tokens: Tokens, node_id: usize) -> Result<(AST<F>, usize)> {
         let mut ast = vec![];
         let ctx = &mut ParserCtx::new(filename_id, node_id);

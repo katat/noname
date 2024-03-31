@@ -30,13 +30,13 @@ use itertools::Itertools;
 use crate::circuit_writer::writer::AnnotatedCell;
 use crate::circuit_writer::{CircuitWriter, DebugInfo};
 use crate::compiler::Sources;
+use crate::helpers::PrettyField;
 use crate::{
     circuit_writer::{Gate, Wiring},
     constants::{Field, Span},
-    helpers::PrettyField as _,
 };
 
-impl<F: Field> CircuitWriter<F> {
+impl<F: Field + PrettyField> CircuitWriter<F> {
     pub fn generate_asm(&self, sources: &Sources, debug: bool) -> String {
         let mut res = "".to_string();
 
@@ -177,7 +177,7 @@ impl<F: Field> CircuitWriter<F> {
     }
 }
 
-fn extract_vars_from_coeffs<F: Field>(vars: &mut OrderedHashSet<F>, coeffs: &[F]) {
+fn extract_vars_from_coeffs<F: Field + PrettyField>(vars: &mut OrderedHashSet<F>, coeffs: &[F]) {
     for coeff in coeffs {
         let s = coeff.pretty();
         if s.len() >= 5 {
@@ -186,7 +186,7 @@ fn extract_vars_from_coeffs<F: Field>(vars: &mut OrderedHashSet<F>, coeffs: &[F]
     }
 }
 
-fn parse_coeffs<F: Field>(vars: &OrderedHashSet<F>, coeffs: &[F]) -> Vec<String> {
+fn parse_coeffs<F: Field + PrettyField>(vars: &OrderedHashSet<F>, coeffs: &[F]) -> Vec<String> {
     let mut coeffs: Vec<_> = coeffs
         .iter()
         .map(|x| {

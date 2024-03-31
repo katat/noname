@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
 
 use crate::{
-    circuit_writer::{CircuitWriter, VarInfo}, constants::{Field, Span}, error::Result, lexer::Token, parser::{types::{FnSig, FunctionDef}, ParserCtx}, type_checker::{FnInfo, TypeChecker}, var::Var
+    circuit_writer::{CircuitWriter, VarInfo}, constants::{Field, Span}, error::Result, helpers::PrettyField, lexer::Token, parser::{types::{FnSig, FunctionDef}, ParserCtx}, type_checker::{FnInfo, TypeChecker}, var::Var
 };
 
 #[derive(Debug)]
@@ -71,19 +71,28 @@ impl<F: Field> fmt::Debug for FnKind<F> {
 const ASSERT_FN: &str = "assert(condition: Bool)";
 const ASSERT_EQ_FN: &str = "assert_eq(lhs: Field, rhs: Field)";
 
-#[derive(EnumIter)]
 pub enum BuiltInFunctions<F: Field> {
     Assert(FnInfo<F>),
     AssertEq(FnInfo<F>),
 }
 
-// TODO: this makes the code difficult to maintain. there are probably better ways to do this.
-impl<F: Field> BuiltInFunctions<F> {
+impl<F: Field + PrettyField> BuiltInFunctions<F> {
     pub fn fn_info(&self) -> &FnInfo<F> {
         match self {
             BuiltInFunctions::Assert(fn_info) => fn_info,
             BuiltInFunctions::AssertEq(fn_info) => fn_info,
         }
     }
+    
+    // TODO: cache the functions, so it won't need to rerun this code that is unnecesasry
+    pub fn functions() -> Vec<BuiltInFunctions<F>> {
+        // TODO: this makes the code difficult to maintain. there are probably better ways to do this.
+        let fn_names = [ASSERT_FN, ASSERT_EQ_FN];
+        
+        // create a collection of FnInfo from fn_names
+        fn_names.iter().map(|fn_name| {
+            BuiltInFunctions::<F>::from_str(fn_name).unwrap()
+        })
+        .collect::<Vec<BuiltInFunctions<F>>>()
+    }
 }
-

@@ -1,7 +1,5 @@
 use crate::{
-    circuit_writer::{CircuitWriter, ProvingBackend},
-    constants::{Field, Span},
-    var::{ConstOrCell, Value, Var},
+    circuit_writer::{CircuitWriter, ProvingBackend}, constants::{Field, Span}, helpers::PrettyField, var::{ConstOrCell, Value, Var}
 };
 
 use super::boolean;
@@ -11,9 +9,9 @@ use ark_ff::{One, Zero};
 use std::ops::Neg;
 
 /// Adds two field elements
-pub fn add<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs: &ConstOrCell<F>, span: Span) -> Var<F> {
-    let zero = Field::zero();
-    let one = Field::one();
+pub fn add<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs: &ConstOrCell<F>, span: Span) -> Var<F> {
+    let zero = F::zero();
+    let one = F::one();
 
     match (lhs, rhs) {
         // 2 constants
@@ -34,7 +32,7 @@ pub fn add<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs:
 
             // add constraint based on backend type
             match compiler.proving_backend {
-                ProvingBackend::Kimchi(backend) => {
+                ProvingBackend::Kimchi(mut backend) => {
                     backend.add_generic_gate(
                         "add a constant with a variable",
                         vec![Some(*cvar), None, Some(res)],
@@ -51,19 +49,19 @@ pub fn add<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs:
             // create a new variable to store the result
             let res = compiler.new_internal_var(
                 Value::LinearCombination(
-                    vec![(Field::one(), *lhs), (Field::one(), *rhs)],
-                    Field::zero(),
+                    vec![(F::one(), *lhs), (F::one(), *rhs)],
+                    F::zero(),
                 ),
                 span,
             );
 
             // add constraint based on backend type
             match compiler.proving_backend {
-                ProvingBackend::Kimchi(backend) => {
+                ProvingBackend::Kimchi(mut backend) => {
                     backend.add_generic_gate(
                         "add two variables together",
                         vec![Some(*lhs), Some(*rhs), Some(res)],
-                        vec![Field::one(), Field::one(), Field::one().neg()],
+                        vec![F::one(), F::one(), F::one().neg()],
                         span,
                     );
                 }
@@ -76,9 +74,9 @@ pub fn add<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs:
 }
 
 /// Subtracts two variables, we only support variables that are of length 1.
-pub fn sub<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs: &ConstOrCell<F>, span: Span) -> Var<F> {
-    let zero = Field::zero();
-    let one = Field::one();
+pub fn sub<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs: &ConstOrCell<F>, span: Span) -> Var<F> {
+    let zero = F::zero();
+    let one = F::one();
 
     match (lhs, rhs) {
         // const1 - const2
@@ -154,9 +152,9 @@ pub fn sub<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs:
 }
 
 /// Multiplies two field elements
-pub fn mul<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs: &ConstOrCell<F>, span: Span) -> Var<F> {
-    let zero = Field::zero();
-    let one = Field::one();
+pub fn mul<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs: &ConstOrCell<F>, span: Span) -> Var<F> {
+    let zero = F::zero();
+    let one = F::one();
 
     match (lhs, rhs) {
         // 2 constants
@@ -169,7 +167,7 @@ pub fn mul<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs:
             if cst.is_zero() {
                 let zero = compiler.add_constant(
                     Some("encoding zero for the result of 0 * var"),
-                    Field::zero(),
+                    F::zero(),
                     span,
                 );
                 return Var::new_var(zero, span);
@@ -210,7 +208,7 @@ pub fn mul<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs:
 
 /// This takes variables that can be anything, and returns a boolean
 // TODO: so perhaps it's not really relevant in this file?
-pub fn equal<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &Var<F>, rhs: &Var<F>, span: Span) -> Var<F> {
+pub fn equal<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, lhs: &Var<F>, rhs: &Var<F>, span: Span) -> Var<F> {
     // sanity check
     assert_eq!(lhs.len(), rhs.len());
 
@@ -219,7 +217,7 @@ pub fn equal<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &Var<F>, rhs: &Var<
     }
 
     // create an accumulator
-    let one = Field::one();
+    let one = F::one();
 
     let acc = compiler.add_constant(
         Some("start accumulator at 1 for the equality check"),
@@ -237,7 +235,7 @@ pub fn equal<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &Var<F>, rhs: &Var<
 }
 
 /// Returns a new variable set to 1 if x1 is equal to x2, 0 otherwise.
-fn equal_cells<F: Field>(
+fn equal_cells<F: Field + PrettyField>(
     compiler: &mut CircuitWriter<F>,
     x1: &ConstOrCell<F>,
     x2: &ConstOrCell<F>,
@@ -265,13 +263,13 @@ fn equal_cells<F: Field>(
     //      then using (3) `res = 0`
     //
 
-    let zero = Field::zero();
-    let one = Field::one();
+    let zero = F::zero();
+    let one = F::one();
 
     match (x1, x2) {
         // two constants
         (ConstOrCell::Const(x1), ConstOrCell::Const(x2)) => {
-            let res = if x1 == x2 { one } else { Field::zero() };
+            let res = if x1 == x2 { one } else { F::zero() };
             Var::new_constant(res, span)
         }
 
@@ -300,9 +298,9 @@ fn equal_cells<F: Field>(
                     let x1 = compiler.compute_var(env, x1)?;
                     let x2 = compiler.compute_var(env, x2)?;
                     if x1 == x2 {
-                        Ok(Field::one())
+                        Ok(F::one())
                     } else {
-                        Ok(Field::zero())
+                        Ok(F::zero())
                     }
                 })),
                 span,
@@ -361,7 +359,7 @@ fn equal_cells<F: Field>(
     }
 }
 
-pub fn if_else<F: Field>(
+pub fn if_else<F: Field + PrettyField>(
     compiler: &mut CircuitWriter<F>,
     cond: &Var<F>,
     then_: &Var<F>,
@@ -383,7 +381,7 @@ pub fn if_else<F: Field>(
     Var::new(vars, span)
 }
 
-pub fn if_else_inner<F: Field>(
+pub fn if_else_inner<F: Field + PrettyField>(
     compiler: &mut CircuitWriter<F>,
     cond: &ConstOrCell<F>,
     then_: &ConstOrCell<F>,
@@ -428,7 +426,7 @@ pub fn if_else_inner<F: Field>(
         //
         (ConstOrCell::Const(_), ConstOrCell::Const(_)) => {
             let cond_then = mul(compiler, then_, cond, span);
-            let one = ConstOrCell::Const(Field::one());
+            let one = ConstOrCell::Const(F::one());
             let one_minus_cond = sub(compiler, &one, cond, span);
             let temp = mul(compiler, &one_minus_cond[0], else_, span);
             add(compiler, &cond_then[0], &temp[0], span)
@@ -481,8 +479,8 @@ pub fn if_else_inner<F: Field>(
                 .cloned()
                 .unwrap();
 
-            let zero = Field::zero();
-            let one = Field::one();
+            let zero = F::zero();
+            let one = F::one();
 
             compiler.add_generic_gate(
                 "constraint for ternary operator: cond * (then - else) = res - else",

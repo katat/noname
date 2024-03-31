@@ -3,14 +3,10 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    constants::{Field, Span},
-    error::{ErrorKind, Result},
-    imports::FnKind,
-    parser::{
+    constants::{Field, Span}, error::{ErrorKind, Result}, helpers::PrettyField, imports::FnKind, parser::{
         types::{FnSig, FunctionDef, Stmt, StmtKind, Ty, TyKind},
         CustomType, Expr, ExprKind, Op2,
-    },
-    syntax::is_type,
+    }, syntax::is_type
 };
 
 use super::{FullyQualified, TypeChecker, TypeInfo, TypedFnEnv};
@@ -70,7 +66,7 @@ impl ExprTyInfo {
     }
 }
 
-impl<F: Field> TypeChecker<F> {
+impl<F: Field + PrettyField> TypeChecker<F> {
     fn compute_type(
         &mut self,
         expr: &Expr,

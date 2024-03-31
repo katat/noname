@@ -1,15 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    constants::{Field, Span},
-    error::{Error, ErrorKind, Result},
-    parser::{
+    circuit_writer::writer::{AnnotatedCell, Cell}, constants::{Field, Span, NUM_REGISTERS}, error::{Error, ErrorKind, Result}, helpers::PrettyField, parser::{
         types::{AttributeKind, FnArg, TyKind},
         Expr,
-    },
-    type_checker::{ConstInfo, FnInfo, FullyQualified, StructInfo, TypeChecker},
-    var::{CellVar, Value, Var},
-    witness::CompiledCircuit,
+    }, type_checker::{ConstInfo, FnInfo, FullyQualified, StructInfo, TypeChecker}, var::{CellVar, Value, Var}, witness::CompiledCircuit
 };
 
 pub use fn_env::{FnEnv, VarInfo};
@@ -23,9 +18,12 @@ use self::writer::PendingGate;
 pub mod fn_env;
 pub mod writer;
 
-pub struct KimchiBackend {
+use num_traits::Zero;
+
+#[derive(Debug)]
+pub struct KimchiBackend<F> where F: Field {
     /// The gates created by the circuit generation.
-    pub gates: Vec<Gate<kimchi::mina_curves::pasta::Fp>>,
+    pub gates: Vec<Gate<F>>,
 
     /// The wiring of the circuit.
     /// It is created during circuit generation.
@@ -37,30 +35,96 @@ pub struct KimchiBackend {
 
     /// This is used to implement the double generic gate,
     /// which encodes two generic gates.
-    pub(crate) pending_generic_gate: Option<PendingGate<kimchi::mina_curves::pasta::Fp>>,
+    pub(crate) pending_generic_gate: Option<PendingGate<F>>,
+
+    /// The execution trace table with vars as placeholders.
+    /// It is created during circuit generation,
+    /// and used by the witness generator.
+    pub(crate) rows_of_vars: Vec<Vec<Option<CellVar>>>,
+
+    /// A vector of debug information that maps to each row of the created circuit.
+    pub(crate) debug_info: Vec<DebugInfo>,
 }
 
+#[derive(Debug)]
 pub struct R1CSBackend {
 
 }
 
+
 // enums for proving backends
-pub enum ProvingBackend {
-    Kimchi(KimchiBackend),
+#[derive(Debug)]
+pub enum ProvingBackend<F: Field> {
+    Kimchi(KimchiBackend<F>),
     R1CS(R1CSBackend),
 }
 
-impl KimchiBackend {
+impl<F: Field> KimchiBackend<F> {
+    /// creates a new gate, and the associated row in the witness/execution trace.
+    // TODO: add_gate instead of gates?
+    pub fn add_gate(
+        &mut self,
+        note: &'static str,
+        typ: GateKind,
+        vars: Vec<Option<CellVar>>,
+        coeffs: Vec<F>,
+        span: Span,
+    ) {
+        // sanitize
+        assert!(coeffs.len() <= NUM_REGISTERS);
+        assert!(vars.len() <= NUM_REGISTERS);
+
+        // construct the execution trace with vars, for the witness generation
+        self.rows_of_vars.push(vars.clone());
+
+        // get current row
+        // important: do that before adding the gate below
+        let row = self.gates.len();
+
+        // add gate
+        self.gates.push(Gate { typ, coeffs });
+
+        // add debug info related to that gate
+        let debug_info = DebugInfo {
+            span,
+            note: note.to_string(),
+        };
+        self.debug_info.push(debug_info.clone());
+
+        // wiring (based on vars)
+        for (col, var) in vars.iter().enumerate() {
+            if let Some(var) = var {
+                let curr_cell = Cell { row, col };
+                let annotated_cell = AnnotatedCell {
+                    cell: curr_cell,
+                    debug: debug_info.clone(),
+                };
+
+                self.wiring
+                    .entry(var.index)
+                    .and_modify(|w| match w {
+                        Wiring::NotWired(old_cell) => {
+                            *w = Wiring::Wired(vec![old_cell.clone(), annotated_cell.clone()])
+                        }
+                        Wiring::Wired(ref mut cells) => {
+                            cells.push(annotated_cell.clone());
+                        }
+                    })
+                    .or_insert(Wiring::NotWired(annotated_cell));
+            }
+        }
+    }
+    
     pub fn add_generic_gate(
         &mut self,
         label: &'static str,
         mut vars: Vec<Option<CellVar>>,
-        mut coeffs: Vec<kimchi::mina_curves::pasta::Fp>,
+        mut coeffs: Vec<F>,
         span: Span,
     ) {
         // padding
         let coeffs_padding = GENERIC_COEFFS.checked_sub(coeffs.len()).unwrap();
-        coeffs.extend(std::iter::repeat(kimchi::mina_curves::pasta::Fp::zero()).take(coeffs_padding));
+        coeffs.extend(std::iter::repeat(F::zero()).take(coeffs_padding));
 
         let vars_padding = GENERIC_REGISTERS.checked_sub(vars.len()).unwrap();
         vars.extend(std::iter::repeat(None).take(vars_padding));
@@ -101,7 +165,7 @@ pub struct CircuitWriter<F> where F: Field {
     // the type checker state might be this one, or one of the ones in [dependencies].
     typed: TypeChecker<F>,
 
-    pub proving_backend: ProvingBackend,
+    pub proving_backend: ProvingBackend<F>,
 
     /// Once this is set, you can generate a witness (and can't modify the circuit?)
     // Note: I don't think we need this, but it acts as a nice redundant failsafe.
@@ -114,10 +178,6 @@ pub struct CircuitWriter<F> where F: Field {
     /// It is created during circuit generation.
     pub(crate) witness_vars: HashMap<usize, Value<F>>,
 
-    /// The execution trace table with vars as placeholders.
-    /// It is created during circuit generation,
-    /// and used by the witness generator.
-    pub(crate) rows_of_vars: Vec<Vec<Option<CellVar>>>,
 
     /// Size of the public input.
     pub(crate) public_input_size: usize,
@@ -154,7 +214,7 @@ pub struct DebugInfo {
     pub note: String,
 }
 
-impl<F: Field> CircuitWriter<F> {
+impl<F: Field + PrettyField> CircuitWriter<F> {
     pub fn expr_type(&self, expr: &Expr) -> Option<&TyKind> {
         self.typed.expr_type(expr)
     }
@@ -220,16 +280,15 @@ impl<F: Field> CircuitWriter<F> {
     }
 }
 
-impl<F: Field> CircuitWriter<F> {
+impl<F: Field + PrettyField> CircuitWriter<F> {
     /// Creates a global environment from the one created by the type checker.
-    fn new(typed: TypeChecker<F>, backend: ProvingBackend) -> Self {
+    fn new(typed: TypeChecker<F>, backend: ProvingBackend<F>) -> Self {
         Self {
             typed,
             proving_backend: backend,
             finalized: false,
             next_variable: 0,
             witness_vars: HashMap::new(),
-            rows_of_vars: vec![],
             public_input_size: 0,
             public_output: None,
             private_input_indices: vec![],
@@ -240,7 +299,7 @@ impl<F: Field> CircuitWriter<F> {
 
     pub fn generate_circuit(
         typed: TypeChecker<F>,
-        backend: ProvingBackend,
+        backend: ProvingBackend<F>,
     ) -> Result<CompiledCircuit<F>> {
         // create circuit writer
         let mut circuit_writer = CircuitWriter::new(typed, backend);
@@ -318,46 +377,51 @@ impl<F: Field> CircuitWriter<F> {
         // compile function
         circuit_writer.compile_main_function(fn_env, &function)?;
 
-        // important: there might still be a pending generic gate
-        if let Some(pending) = circuit_writer.pending_generic_gate.take() {
-            circuit_writer.add_gate(
-                pending.label,
-                GateKind::DoubleGeneric,
-                pending.vars,
-                pending.coeffs,
-                pending.span,
-            );
-        }
+        match circuit_writer.proving_backend {
+            ProvingBackend::Kimchi(mut backend) => {
+                // important: there might still be a pending generic gate
+                if let Some(pending) = backend.pending_generic_gate.take() {
+                    backend.add_gate(
+                        pending.label,
+                        GateKind::DoubleGeneric,
+                        pending.vars,
+                        pending.coeffs,
+                        pending.span,
+                    );
+                }
 
-        // for sanity check, we make sure that every cellvar created has ended up in a gate
-        let mut written_vars = HashSet::new();
-        for row in &circuit_writer.rows_of_vars {
-            row.iter().flatten().for_each(|cvar| {
-                written_vars.insert(cvar.index);
-            });
-        }
+                // for sanity check, we make sure that every cellvar created has ended up in a gate
+                let mut written_vars = HashSet::new();
+                for row in &backend.rows_of_vars {
+                    row.iter().flatten().for_each(|cvar| {
+                        written_vars.insert(cvar.index);
+                    });
+                }
 
-        for var in 0..circuit_writer.next_variable {
-            if !written_vars.contains(&var) {
-                if circuit_writer.private_input_indices.contains(&var) {
-                    // compute main sig
-                    let (_main_sig, main_span) = {
-                        let fn_info = circuit_writer.main_info()?.clone();
-
-                        (fn_info.sig().clone(), fn_info.span)
-                    };
-
-                    // TODO: is this error useful?
-                    return Err(circuit_writer.error(ErrorKind::PrivateInputNotUsed, main_span));
-                } else {
-                    panic!("there's a bug in the circuit_writer, some cellvar does not end up being a cellvar in the circuit!");
+                for var in 0..circuit_writer.next_variable {
+                    if !written_vars.contains(&var) {
+                        if circuit_writer.private_input_indices.contains(&var) {
+                            // compute main sig
+                            let (_main_sig, main_span) = {
+                                let fn_info = circuit_writer.main_info()?.clone();
+        
+                                (fn_info.sig().clone(), fn_info.span)
+                            };
+        
+                            // TODO: is this error useful?
+                            return Err(circuit_writer.error(ErrorKind::PrivateInputNotUsed, main_span));
+                        } else {
+                            panic!("there's a bug in the circuit_writer, some cellvar does not end up being a cellvar in the circuit!");
+                        }
+                    }
+                }
+        
+                // kimchi hack
+                if backend.gates.len() <= 2 {
+                    panic!("the circuit is either too small or does not constrain anything (TODO: better error)");
                 }
             }
-        }
-
-        // kimchi hack
-        if circuit_writer.gates.len() <= 2 {
-            panic!("the circuit is either too small or does not constrain anything (TODO: better error)");
+            ProvingBackend::R1CS(_) => todo!(),
         }
 
         // we finalized!

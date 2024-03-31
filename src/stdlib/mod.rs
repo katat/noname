@@ -4,29 +4,23 @@ use ark_ff::{One as _, Zero};
 use once_cell::sync::Lazy;
 
 use crate::{
-    circuit_writer::{CircuitWriter, VarInfo},
-    constants::{Field, Span},
-    error::{Error, ErrorKind, Result},
-    imports::{BuiltInFunctions, BuiltinModule, FnHandle, FnKind},
-    lexer::Token,
-    parser::{
+    circuit_writer::{CircuitWriter, VarInfo}, constants::{Field, KimchiField, Span}, error::{Error, ErrorKind, Result}, helpers::PrettyField, imports::{BuiltInFunctions, BuiltinModule, FnHandle, FnKind}, lexer::Token, parser::{
         types::{FnSig, TyKind},
         ParserCtx,
-    },
-    type_checker::FnInfo,
-    var::{ConstOrCell, Var},
+    }, type_checker::FnInfo, var::{ConstOrCell, Var}
 };
 
 // use self::crypto::CRYPTO_FNS;
 
 pub mod crypto;
+pub mod fp_kimchi;
 
 // pub static CRYPTO_MODULE: Lazy<BuiltinModule> = Lazy::new(|| {
 //     let functions = parse_fn_sigs(&CRYPTO_FNS);
 //     BuiltinModule { functions }
 // });
 
-pub fn get_std_fn<F: Field>(submodule: &str, fn_name: &str, span: Span) -> Result<FnInfo<F>> {
+pub fn get_std_fn<F: Field + PrettyField>(submodule: &str, fn_name: &str, span: Span) -> Result<FnInfo<F>> {
     match submodule {
         "crypto" => 
             match crypto::CryptoFn::from_str(fn_name) {
@@ -39,17 +33,6 @@ pub fn get_std_fn<F: Field>(submodule: &str, fn_name: &str, span: Span) -> Resul
                     span,
                 )),
             },
-            // CRYPTO_MODULE
-            // .functions
-            // .get(fn_name)
-            // .cloned()
-            // .ok_or_else(|| {
-            //     Error::new(
-            //         "type-checker",
-            //         ErrorKind::UnknownExternalFn(submodule.to_string(), fn_name.to_string()),
-            //         span,
-            //     )
-            // }),
         _ => Err(Error::new(
             "type-checker",
             ErrorKind::StdImport(submodule.to_string()),
@@ -93,7 +76,7 @@ const ASSERT_FN: &str = "assert(condition: Bool)";
 const ASSERT_EQ_FN: &str = "assert_eq(lhs: Field, rhs: Field)";
 
 /// Asserts that two vars are equal.
-fn assert_eq<F: Field>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], span: Span) -> Result<Option<Var<F>>> {
+fn assert_eq<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], span: Span) -> Result<Option<Var<F>>> {
     // we get two vars
     assert_eq!(vars.len(), 2);
     let lhs_info = &vars[0];
@@ -166,7 +149,7 @@ fn assert_eq<F: Field>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], spa
 }
 
 /// Asserts that a condition is true.
-fn assert<F: Field>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], span: Span) -> Result<Option<Var<F>>> {
+fn assert<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], span: Span) -> Result<Option<Var<F>>> {
     // we get a single var
     assert_eq!(vars.len(), 1);
 
@@ -200,7 +183,7 @@ fn assert<F: Field>(compiler: &mut CircuitWriter<F>, vars: &[VarInfo<F>], span: 
     Ok(None)
 }
 
-impl<F: Field> BuiltInFunctions<F> {
+impl<F: Field + PrettyField> BuiltInFunctions<F> {
 
     pub fn from_str(s: &str) -> Result<BuiltInFunctions<F>> {
         let parse_fn = |sig: &'static str, fn_ptr: FnHandle<F>| -> Result<BuiltInFunctions<F>> {

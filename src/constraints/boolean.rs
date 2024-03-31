@@ -5,9 +5,7 @@ use std::ops::Neg;
 use ark_ff::{One, Zero};
 
 use crate::{
-    circuit_writer::CircuitWriter,
-    constants::{Field, Span},
-    var::{ConstOrCell, Value, Var},
+    circuit_writer::CircuitWriter, constants::{Field, Span}, helpers::PrettyField, var::{ConstOrCell, Value, Var}
 };
 
 //todo encapsulate in a struct
@@ -16,7 +14,7 @@ pub fn is_valid<F: Field>(f: F) -> bool {
     f.is_one() || f.is_zero()
 }
 
-pub fn check<F: Field>(compiler: &mut CircuitWriter<F>, xx: &ConstOrCell<F>, span: Span) {
+pub fn check<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, xx: &ConstOrCell<F>, span: Span) {
     let zero = F::zero();
     let one = F::one();
 
@@ -32,7 +30,7 @@ pub fn check<F: Field>(compiler: &mut CircuitWriter<F>, xx: &ConstOrCell<F>, spa
     };
 }
 
-pub fn and<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs: &ConstOrCell<F>, span: Span) -> Var<F> {
+pub fn and<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs: &ConstOrCell<F>, span: Span) -> Var<F> {
     match (lhs, rhs) {
         // two constants
         (ConstOrCell::Const(lhs), ConstOrCell::Const(rhs)) => Var::new_constant(*lhs * *rhs, span),
@@ -68,7 +66,7 @@ pub fn and<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs:
     }
 }
 
-pub fn not<F: Field>(compiler: &mut CircuitWriter<F>, var: &ConstOrCell<F>, span: Span) -> Var<F> {
+pub fn not<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, var: &ConstOrCell<F>, span: Span) -> Var<F> {
     match var {
         ConstOrCell::Const(cst) => {
             let value = if cst.is_one() {
@@ -104,7 +102,7 @@ pub fn not<F: Field>(compiler: &mut CircuitWriter<F>, var: &ConstOrCell<F>, span
     }
 }
 
-pub fn or<F: Field>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs: &ConstOrCell<F>, span: Span) -> Var<F> {
+pub fn or<F: Field + PrettyField>(compiler: &mut CircuitWriter<F>, lhs: &ConstOrCell<F>, rhs: &ConstOrCell<F>, span: Span) -> Var<F> {
     let not_lhs = not(compiler, lhs, span);
     let not_rhs = not(compiler, rhs, span);
     let both_false = and(compiler, &not_lhs[0], &not_rhs[0], span);
