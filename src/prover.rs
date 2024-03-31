@@ -194,9 +194,9 @@ impl ProverIndex {
 //
 
 impl VerifierIndex {
-    pub fn verify<F: Field>(
+    pub fn verify(
         &self,
-        full_public_inputs: Vec<F>,
+        full_public_inputs: Vec<KimchiField>,
         proof: ProverProof<Curve, OpeningProof<Curve>>,
     ) -> miette::Result<()> {
         // verify the proof
