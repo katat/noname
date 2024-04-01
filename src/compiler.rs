@@ -70,8 +70,8 @@ impl<T> IntoMiette<T> for Result<T> {
     }
 }
 
-pub fn typecheck_next_file<F: Field + PrettyField>(
-    typechecker: &mut TypeChecker<F>,
+pub fn typecheck_next_file<F: Field + PrettyField, B: Backend<F>>(
+    typechecker: &mut TypeChecker<F, B>,
     this_module: Option<UserRepo>,
     sources: &mut Sources,
     filename: String,
@@ -83,8 +83,8 @@ pub fn typecheck_next_file<F: Field + PrettyField>(
 }
 
 /// This should not be used directly. Check [get_tast] instead.
-pub fn typecheck_next_file_inner<F: Field + PrettyField>(
-    typechecker: &mut TypeChecker<F>,
+pub fn typecheck_next_file_inner<F: Field + PrettyField, B: Backend<F>>(
+    typechecker: &mut TypeChecker<F, B>,
     this_module: Option<UserRepo>,
     sources: &mut Sources,
     filename: String,
@@ -136,7 +136,7 @@ pub fn get_nast<F: Field + FromStr>(
 
 pub fn compile<F: Field + PrettyField, B: Backend<F>>(
     sources: &Sources,
-    tast: TypeChecker<F>,
+    tast: TypeChecker<F, B>,
     backend: B,
 ) -> miette::Result<CompiledCircuit<F, B>> {
     CircuitWriter::generate_circuit(tast, backend).into_miette(sources)

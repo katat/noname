@@ -20,7 +20,7 @@ pub mod fp_kimchi;
 //     BuiltinModule { functions }
 // });
 
-pub fn get_std_fn<F: Field + PrettyField>(submodule: &str, fn_name: &str, span: Span) -> Result<FnInfo<F>> {
+pub fn get_std_fn<F: Field + PrettyField, B: Backend<F>>(submodule: &str, fn_name: &str, span: Span) -> Result<FnInfo<F, B>> {
     match submodule {
         "crypto" => 
             match crypto::CryptoFn::from_str(fn_name) {
@@ -43,7 +43,7 @@ pub fn get_std_fn<F: Field + PrettyField>(submodule: &str, fn_name: &str, span: 
 
 /// Takes a list of function signatures (as strings) and their associated function pointer,
 /// returns the same list but with the parsed functions (as [FunctionSig]).
-pub fn parse_fn_sigs<F: Field>(fn_sigs: &[(&str, FnHandle<F>)]) -> HashMap<String, FnInfo<F>> {
+pub fn parse_fn_sigs<F: Field, B: Backend<F>>(fn_sigs: &[(&str, FnHandle<F, B>)]) -> HashMap<String, FnInfo<F, B>> {
     let mut functions = HashMap::new();
     let ctx = &mut ParserCtx::default();
 
@@ -183,9 +183,9 @@ fn assert<F: Field + PrettyField, B: Backend<F>>(compiler: &mut CircuitWriter<F,
     Ok(None)
 }
 
-impl<F: Field + PrettyField> BuiltInFunctions<F> {
+impl<F: Field + PrettyField, B: Backend<F>> BuiltInFunctions<F, B> {
 
-    pub fn from_str(s: &str) -> Result<BuiltInFunctions<F>> {
+    pub fn from_str(s: &str) -> Result<BuiltInFunctions<F, B>> {
         let parse_fn = |sig: &'static str, fn_ptr: FnHandle<F>| -> Result<BuiltInFunctions<F>> {
             let ctx = &mut ParserCtx::default();
             // filename_id 0 is for builtins

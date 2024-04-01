@@ -19,32 +19,35 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct Module<F>
+pub struct Module<F, B>
 where
     F: Field,
+    B: Backend<F>,
 {
     pub name: String,
-    pub kind: ModuleKind<F>,
+    pub kind: ModuleKind<F, B>,
 }
 
 #[derive(Debug)]
-pub enum ModuleKind<F>
+pub enum ModuleKind<F, B>
 where
     F: Field,
+    B: Backend<F>,
 {
     /// A module that contains only built-in functions.
-    BuiltIn(BuiltinModule<F>),
+    BuiltIn(BuiltinModule<F, B>),
 
     /// A module that contains both built-in functions and native functions.
-    Native(TypeChecker<F>),
+    Native(TypeChecker<F, B>),
 }
 
 #[derive(Debug, Clone)]
-pub struct BuiltinModule<F>
+pub struct BuiltinModule<F, B>
 where
     F: Field,
+    B: Backend<F>,
 {
-    pub functions: HashMap<String, FnInfo<F>>,
+    pub functions: HashMap<String, FnInfo<F, B>>,
 }
 
 /*
@@ -94,13 +97,13 @@ impl<F: Field, B: Backend<F>> fmt::Debug for FnKind<F, B> {
 const ASSERT_FN: &str = "assert(condition: Bool)";
 const ASSERT_EQ_FN: &str = "assert_eq(lhs: Field, rhs: Field)";
 
-pub enum BuiltInFunctions<F: Field> {
-    Assert(FnInfo<F>),
-    AssertEq(FnInfo<F>),
+pub enum BuiltInFunctions<F: Field, B: Backend<F>> {
+    Assert(FnInfo<F, B>),
+    AssertEq(FnInfo<F, B>),
 }
 
-impl<F: Field + PrettyField> BuiltInFunctions<F> {
-    pub fn fn_info(&self) -> &FnInfo<F> {
+impl<F: Field + PrettyField, B: Backend<F>> BuiltInFunctions<F, B> {
+    pub fn fn_info(&self) -> &FnInfo<F, B> {
         match self {
             BuiltInFunctions::Assert(fn_info) => fn_info,
             BuiltInFunctions::AssertEq(fn_info) => fn_info,
@@ -108,7 +111,7 @@ impl<F: Field + PrettyField> BuiltInFunctions<F> {
     }
 
     // TODO: cache the functions, so it won't need to rerun this code that is unnecesasry
-    pub fn functions() -> Vec<BuiltInFunctions<F>> {
+    pub fn functions() -> Vec<BuiltInFunctions<F, B>> {
         // TODO: this makes the code difficult to maintain. there are probably better ways to do this.
         let fn_names = [ASSERT_FN, ASSERT_EQ_FN];
 

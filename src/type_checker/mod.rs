@@ -1,7 +1,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use crate::{
-    cli::packages::UserRepo, constants::{Field, Span}, error::{Error, ErrorKind, Result}, helpers::PrettyField, imports::{BuiltInFunctions, FnKind}, name_resolution::NAST, parser::{
+    backends::Backend, cli::packages::UserRepo, constants::{Field, Span}, error::{Error, ErrorKind, Result}, helpers::PrettyField, imports::{BuiltInFunctions, FnKind}, name_resolution::NAST, parser::{
         types::{FuncOrMethod, FunctionDef, ModulePath, RootKind, Ty, TyKind},
         CustomType, Expr, StructDef,
     }, stdlib::{crypto::CryptoFn, QUALIFIED_BUILTINS}
@@ -54,10 +54,10 @@ impl FullyQualified {
 
 /// The environment we use to type check a noname program.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TypeChecker<F> where F: Field {
+pub struct TypeChecker<F, B> where F: Field, B: Backend<F> {
     /// the functions present in the scope
     /// contains at least the set of builtin functions (like assert_eq)
-    functions: HashMap<FullyQualified, FnInfo<F>>,
+    functions: HashMap<FullyQualified, FnInfo<F, B>>,
 
     /// Custom structs type information and ASTs for methods.
     structs: HashMap<FullyQualified, StructInfo>,
@@ -71,7 +71,7 @@ pub struct TypeChecker<F> where F: Field {
     node_types: HashMap<usize, TyKind>,
 }
 
-impl<F: Field + PrettyField> TypeChecker<F> {
+impl<F: Field + PrettyField, B: Backend<F>> TypeChecker<F, B> {
     pub(crate) fn expr_type(&self, expr: &Expr) -> Option<&TyKind> {
         self.node_types.get(&expr.node_id)
     }
@@ -85,7 +85,7 @@ impl<F: Field + PrettyField> TypeChecker<F> {
         self.structs.get(qualified)
     }
 
-    pub(crate) fn fn_info(&self, qualified: &FullyQualified) -> Option<&FnInfo<F>> {
+    pub(crate) fn fn_info(&self, qualified: &FullyQualified) -> Option<&FnInfo<F, B>> {
         if qualified.module == Some(UserRepo::new("std/builtins")) {
             // if it's a built-in: get it from a global
             Some(BuiltInFunctions::from_str(&qualified.name).unwrap().fn_info())
@@ -124,7 +124,7 @@ impl<F: Field + PrettyField> TypeChecker<F> {
     }
 }
 
-impl<F: Field + PrettyField> TypeChecker<F> {
+impl<F: Field + PrettyField, B: Backend<F>> TypeChecker<F, B> {
     // TODO: we can probably lazy const this
     pub fn new() -> Self {
         let mut type_checker = Self {

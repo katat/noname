@@ -3,22 +3,30 @@ use std::{
     ops::Neg,
 };
 
+use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
 use kimchi::circuits::polynomials::generic::{GENERIC_COEFFS, GENERIC_REGISTERS};
 use kimchi::circuits::wires::Wire;
 use num_bigint::BigUint;
 use num_traits::Num as _;
-use serde::{Deserialize, Serialize};
-use ark_ff::PrimeField; // Add this import
+use serde::{Deserialize, Serialize}; // Add this import
 
 use crate::{
-    backends::Backend, circuit_writer::{CircuitWriter, DebugInfo, FnEnv, VarInfo}, constants::{Field, Span, NUM_REGISTERS}, constraints::{boolean, field}, error::{ErrorKind, Result}, helpers::PrettyField, imports::FnKind, parser::{
+    backends::Backend,
+    circuit_writer::{CircuitWriter, DebugInfo, FnEnv, VarInfo},
+    constants::{Field, Span, NUM_REGISTERS},
+    // constraints::{boolean, field},
+    error::{ErrorKind, Result},
+    helpers::PrettyField,
+    imports::FnKind,
+    parser::{
         types::{FunctionDef, Stmt, StmtKind, TyKind},
         Expr, ExprKind, Op2,
-    }, syntax::is_type, type_checker::FullyQualified, var::{CellVar, ConstOrCell, Value, Var, VarOrRef}
+    },
+    syntax::is_type,
+    type_checker::FullyQualified,
+    var::{CellVar, ConstOrCell, Value, Var, VarOrRef},
 };
-
-use super::ProvingBackend;
 
 //
 // Data structures
@@ -44,7 +52,10 @@ impl From<GateKind> for kimchi::circuits::gate::GateType {
 
 // TODO: this could also contain the span that defined the gate!
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Gate<F> where F: Field {
+pub struct Gate<F>
+where
+    F: Field,
+{
     /// Type of gate
     pub typ: GateKind,
 
@@ -53,7 +64,8 @@ pub struct Gate<F> where F: Field {
     pub coeffs: Vec<F>,
 }
 
-impl<F: Field + PrimeField> Gate<F> { // Add PrimeField trait constraint
+impl<F: Field + PrimeField> Gate<F> {
+    // Add PrimeField trait constraint
     pub fn to_kimchi_gate(&self, row: usize) -> kimchi::circuits::gate::CircuitGate<F> {
         kimchi::circuits::gate::CircuitGate {
             typ: self.typ.into(),
@@ -225,7 +237,7 @@ impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
             TyKind::Field => (),
             TyKind::Bool => {
                 assert_eq!(input.len(), 1);
-                boolean::check(self, &input[0], span);
+                self.backend.check(&input[0], span);
             }
             TyKind::Array(tykind, _) => {
                 let el_size = self.size_of(tykind);
@@ -304,7 +316,7 @@ impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
         }
     }
 
-    pub fn new_internal_var(&mut self, val: Value<F>, span: Span) -> CellVar {
+    pub fn new_internal_var(&mut self, val: Value<F, B>, span: Span) -> CellVar {
         // create new var
         let var = CellVar::new(self.next_variable, span);
         self.next_variable += 1;
@@ -512,7 +524,7 @@ impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
                     .unwrap()
                     .value(self, fn_env);
 
-                let res = field::if_else(self, &cond, &then_, &else_, expr.span);
+                let res = self.backend.if_else(&cond, &then_, &else_, expr.span);
 
                 Ok(Some(VarOrRef::Var(res)))
             }
@@ -559,12 +571,12 @@ impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
                 let rhs = rhs.value(self, fn_env);
 
                 let res = match op {
-                    Op2::Addition => field::add(self, &lhs[0], &rhs[0], expr.span),
-                    Op2::Subtraction => field::sub(self, &lhs[0], &rhs[0], expr.span),
-                    Op2::Multiplication => field::mul(self, &lhs[0], &rhs[0], expr.span),
-                    Op2::Equality => field::equal(self, &lhs, &rhs, expr.span),
-                    Op2::BoolAnd => boolean::and(self, &lhs[0], &rhs[0], expr.span),
-                    Op2::BoolOr => boolean::or(self, &lhs[0], &rhs[0], expr.span),
+                    Op2::Addition => self.backend.add(&lhs[0], &rhs[0], expr.span),
+                    Op2::Subtraction => self.backend.sub(&lhs[0], &rhs[0], expr.span),
+                    Op2::Multiplication => self.backend.mul(&lhs[0], &rhs[0], expr.span),
+                    Op2::Equality => self.backend.equal(&lhs, &rhs, expr.span),
+                    Op2::BoolAnd => self.backend.and(&lhs[0], &rhs[0], expr.span),
+                    Op2::BoolOr => self.backend.or(&lhs[0], &rhs[0], expr.span),
                     Op2::Division => todo!(),
                 };
 
@@ -584,7 +596,7 @@ impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
 
                 let var = var.value(self, fn_env);
 
-                let res = boolean::not(self, &var[0], expr.span.merge_with(b.span));
+                let res = self.backend.not(&var[0], expr.span.merge_with(b.span));
                 Ok(Some(VarOrRef::Var(res)))
             }
 
@@ -746,12 +758,7 @@ impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
     // TODO: we should cache constants to avoid creating a new variable for each constant
     /// This should be called only when you want to constrain a constant for real.
     /// Gates that handle constants should always make sure to call this function when they want them constrained.
-    pub fn add_constant(
-        &mut self,
-        label: Option<&'static str>,
-        value: F,
-        span: Span,
-    ) -> CellVar {
+    pub fn add_constant(&mut self, label: Option<&'static str>, value: F, span: Span) -> CellVar {
         if let Some(cvar) = self.cached_constants.get(&value) {
             return *cvar;
         }
@@ -771,7 +778,6 @@ impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
                 );
             }
             ProvingBackend::R1CS(_) => todo!(),
-            
         };
 
         var
@@ -797,7 +803,6 @@ impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
                     );
                 }
                 ProvingBackend::R1CS(_) => todo!(),
-                
             }
         }
 
@@ -850,7 +855,10 @@ impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
-pub(crate) struct PendingGate<F> where F: Field {
+pub(crate) struct PendingGate<F>
+where
+    F: Field,
+{
     pub label: &'static str,
     #[serde(skip)]
     pub coeffs: Vec<F>,

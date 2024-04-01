@@ -66,7 +66,7 @@ impl ExprTyInfo {
     }
 }
 
-impl<F: Field + PrettyField> TypeChecker<F> {
+impl<F: Field + PrettyField, B: Backend<F>> TypeChecker<F, B> {
     fn compute_type(
         &mut self,
         expr: &Expr,

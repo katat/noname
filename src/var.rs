@@ -227,7 +227,7 @@ pub enum VarOrRef<F> where F: Field {
     },
 }
 
-impl<F: Field + PrettyField, B: Backend<F>> VarOrRef<F> {
+impl<F: Field + PrettyField> VarOrRef<F> {
     pub(crate) fn constant(&self) -> Option<F> {
         match self {
             VarOrRef::Var(var) => var.constant(),
@@ -238,7 +238,7 @@ impl<F: Field + PrettyField, B: Backend<F>> VarOrRef<F> {
     /// Returns the value within the variable or pointer.
     /// If it is a pointer, we lose information about the original variable,
     /// thus calling this function is aking to passing the variable by value.
-    pub(crate) fn value(self, circuit_writer: &CircuitWriter<F, B>, fn_env: &FnEnv<F>) -> Var<F> {
+    pub(crate) fn value<B: Backend<F>>(self, circuit_writer: &CircuitWriter<F, B>, fn_env: &FnEnv<F>) -> Var<F> {
         match self {
             VarOrRef::Var(var) => var,
             VarOrRef::Ref {

@@ -20,7 +20,7 @@ use super::Backend;
 #[derive(Debug)]
 pub struct KimchiBackend<F>
 where
-    F: Field,
+    F: Field + PrettyField,
 {
     /// The gates created by the circuit generation.
     pub gates: Vec<Gate<F>>,
@@ -44,12 +44,53 @@ where
 
     /// A vector of debug information that maps to each row of the created circuit.
     pub(crate) debug_info: Vec<DebugInfo>,
+
+    /// This is used to give a distinct number to each variable during circuit generation.
+    pub(crate) next_variable: usize,
+
+    /// This is how you compute the value of each variable during witness generation.
+    /// It is created during circuit generation.
+    pub(crate) witness_vars: HashMap<usize, Value<F, KimchiBackend<F>>>,
 }
 
-impl<F: Field> KimchiBackend<F> {
+impl<F: Field + PrettyField> Backend<F> for KimchiBackend<F> {
+    fn new_internal_var<B: Backend<F>>(&mut self, val: Value<F, B>, span: Span) -> CellVar {
+        // create new var
+        let var = CellVar::new(self.next_variable, span);
+        self.next_variable += 1;
+
+        // store it in the circuit_writer
+        self.witness_vars.insert(var.index, val);
+
+        var
+    }
+
+    // TODO: we should cache constants to avoid creating a new variable for each constant
+    /// This should be called only when you want to constrain a constant for real.
+    /// Gates that handle constants should always make sure to call this function when they want them constrained.
+    fn add_constant(&mut self, label: Option<&'static str>, value: F, span: Span) -> CellVar {
+        if let Some(cvar) = self.cached_constants.get(&value) {
+            return *cvar;
+        }
+
+        let var = self.new_internal_var(Value::Constant(value), span);
+        self.cached_constants.insert(value, var);
+
+        let zero = F::zero();
+
+        self.add_generic_gate(
+            label.unwrap_or("hardcode a constant"),
+            vec![Some(var)],
+            vec![F::one(), zero, zero, zero, value.neg()],
+            span,
+        );
+
+        var
+    }
+
     /// creates a new gate, and the associated row in the witness/execution trace.
     // TODO: add_gate instead of gates?
-    pub fn add_gate(
+    fn add_gate(
         &mut self,
         note: &'static str,
         typ: GateKind,
@@ -102,7 +143,7 @@ impl<F: Field> KimchiBackend<F> {
         }
     }
 
-    pub fn add_generic_gate(
+    fn add_generic_gate(
         &mut self,
         label: &'static str,
         mut vars: Vec<Option<CellVar>>,
@@ -140,12 +181,9 @@ impl<F: Field> KimchiBackend<F> {
             });
         }
     }
-}
 
-impl<F: Field + PrettyField, B: Backend<F>> BooleanConstraints<F, B> for KimchiBackend<F> {
     fn check(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         xx: &crate::var::ConstOrCell<F>,
         span: Span,
     ) {
@@ -166,7 +204,6 @@ impl<F: Field + PrettyField, B: Backend<F>> BooleanConstraints<F, B> for KimchiB
 
     fn and(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         lhs: &crate::var::ConstOrCell<F>,
         rhs: &crate::var::ConstOrCell<F>,
         span: Span,
@@ -190,7 +227,7 @@ impl<F: Field + PrettyField, B: Backend<F>> BooleanConstraints<F, B> for KimchiB
             // two vars
             (ConstOrCell::Cell(lhs), ConstOrCell::Cell(rhs)) => {
                 // create a new variable to store the result
-                let res = compiler.new_internal_var(Value::Mul(*lhs, *rhs), span);
+                let res = self.new_internal_var(Value::Mul(*lhs, *rhs), span);
 
                 // create a gate to constrain the result
                 let zero = F::zero();
@@ -210,7 +247,6 @@ impl<F: Field + PrettyField, B: Backend<F>> BooleanConstraints<F, B> for KimchiB
 
     fn not(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         var: &crate::var::ConstOrCell<F>,
         span: Span,
     ) -> crate::var::Var<F> {
@@ -228,7 +264,7 @@ impl<F: Field + PrettyField, B: Backend<F>> BooleanConstraints<F, B> for KimchiB
 
                 // create a new variable to store the result
                 let lc = Value::LinearCombination(vec![(one.neg(), *cvar)], one); // 1 - X
-                let res = compiler.new_internal_var(lc, span);
+                let res = self.new_internal_var(lc, span);
 
                 // create a gate to constrain the result
                 self.add_generic_gate(
@@ -247,22 +283,18 @@ impl<F: Field + PrettyField, B: Backend<F>> BooleanConstraints<F, B> for KimchiB
 
     fn or(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         lhs: &crate::var::ConstOrCell<F>,
         rhs: &crate::var::ConstOrCell<F>,
         span: Span,
     ) -> crate::var::Var<F> {
-        let not_lhs = self.not(compiler, lhs, span);
-        let not_rhs = self.not(compiler, rhs, span);
-        let both_false = self.and(compiler, &not_lhs[0], &not_rhs[0], span);
-        self.not(compiler, &both_false[0], span)
+        let not_lhs = self.not(lhs, span);
+        let not_rhs = self.not(rhs, span);
+        let both_false = self.and(&not_lhs[0], &not_rhs[0], span);
+        self.not(&both_false[0], span)
     }
-}
 
-impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBackend<F> {
     fn add(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         lhs: &ConstOrCell<F>,
         rhs: &ConstOrCell<F>,
         span: Span,
@@ -286,7 +318,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
                 }
 
                 // create a new variable to store the result
-                let res = compiler
+                let res = self
                     .new_internal_var(Value::LinearCombination(vec![(one, *cvar)], *cst), span);
 
                 self.add_generic_gate(
@@ -300,7 +332,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
             }
             (ConstOrCell::Cell(lhs), ConstOrCell::Cell(rhs)) => {
                 // create a new variable to store the result
-                let res = compiler.new_internal_var(
+                let res = self.new_internal_var(
                     Value::LinearCombination(vec![(F::one(), *lhs), (F::one(), *rhs)], F::zero()),
                     span,
                 );
@@ -319,7 +351,6 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
 
     fn sub(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         lhs: &ConstOrCell<F>,
         rhs: &ConstOrCell<F>,
         span: Span,
@@ -336,7 +367,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
             // const - var
             (ConstOrCell::Const(cst), ConstOrCell::Cell(cvar)) => {
                 // create a new variable to store the result
-                let res = compiler.new_internal_var(
+                let res = self.new_internal_var(
                     Value::LinearCombination(vec![(one.neg(), *cvar)], *cst),
                     span,
                 );
@@ -362,7 +393,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
                 }
 
                 // create a new variable to store the result
-                let res = compiler.new_internal_var(
+                let res = self.new_internal_var(
                     Value::LinearCombination(vec![(one, *cvar)], cst.neg()),
                     span,
                 );
@@ -383,7 +414,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
             // lhs - rhs
             (ConstOrCell::Cell(lhs), ConstOrCell::Cell(rhs)) => {
                 // create a new variable to store the result
-                let res = compiler.new_internal_var(
+                let res = self.new_internal_var(
                     Value::LinearCombination(vec![(one, *lhs), (one.neg(), *rhs)], zero),
                     span,
                 );
@@ -404,7 +435,6 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
 
     fn mul(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         lhs: &ConstOrCell<F>,
         rhs: &ConstOrCell<F>,
         span: Span,
@@ -423,7 +453,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
             | (ConstOrCell::Cell(cvar), ConstOrCell::Const(cst)) => {
                 // if the constant is zero, we can ignore this gate
                 if cst.is_zero() {
-                    let zero = compiler.add_constant(
+                    let zero = self.add_constant(
                         Some("encoding zero for the result of 0 * var"),
                         F::zero(),
                         span,
@@ -432,7 +462,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
                 }
 
                 // create a new variable to store the result
-                let res = compiler.new_internal_var(Value::Scale(*cst, *cvar), span);
+                let res = self.new_internal_var(Value::Scale(*cst, *cvar), span);
 
                 // create a gate to store the result
                 // TODO: we should use an add_generic function that takes advantage of the double generic gate
@@ -449,7 +479,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
             // everything is a var
             (ConstOrCell::Cell(lhs), ConstOrCell::Cell(rhs)) => {
                 // create a new variable to store the result
-                let res = compiler.new_internal_var(Value::Mul(*lhs, *rhs), span);
+                let res = self.new_internal_var(Value::Mul(*lhs, *rhs), span);
 
                 // create a gate to store the result
                 self.add_generic_gate(
@@ -466,7 +496,6 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
 
     fn equal(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         lhs: &Var<F>,
         rhs: &Var<F>,
         span: Span,
@@ -475,13 +504,13 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
         assert_eq!(lhs.len(), rhs.len());
 
         if lhs.len() == 1 {
-            return self.equal_cells(compiler, &lhs[0], &rhs[0], span);
+            return self.equal_cells(&lhs[0], &rhs[0], span);
         }
 
         // create an accumulator
         let one = F::one();
 
-        let acc = compiler.add_constant(
+        let acc = self.add_constant(
             Some("start accumulator at 1 for the equality check"),
             one,
             span,
@@ -489,8 +518,8 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
         let mut acc = Var::new_var(acc, span);
 
         for (l, r) in lhs.cvars.iter().zip(&rhs.cvars) {
-            let res = self.equal_cells(compiler, l, r, span);
-            acc = self.and(compiler, &res[0], &acc[0], span);
+            let res = self.equal_cells(l, r, span);
+            acc = self.and(&res[0], &acc[0], span);
         }
 
         acc
@@ -498,7 +527,6 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
 
     fn equal_cells(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         x1: &ConstOrCell<F>,
         x2: &ConstOrCell<F>,
         span: Span,
@@ -537,7 +565,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
 
             (x1, x2) => {
                 let x1 = match x1 {
-                    ConstOrCell::Const(cst) => compiler.add_constant(
+                    ConstOrCell::Const(cst) => self.add_constant(
                         Some("encode the lhs constant of the equality check in the circuit"),
                         *cst,
                         span,
@@ -546,7 +574,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
                 };
 
                 let x2 = match x2 {
-                    ConstOrCell::Const(cst) => compiler.add_constant(
+                    ConstOrCell::Const(cst) => self.add_constant(
                         Some("encode the rhs constant of the equality check in the circuit"),
                         *cst,
                         span,
@@ -555,7 +583,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
                 };
 
                 // compute the result
-                let res = compiler.new_internal_var(
+                let res = self.new_internal_var(
                     Value::Hint(Box::new(move |compiler, env| {
                         let x1 = compiler.compute_var(env, x1)?;
                         let x2 = compiler.compute_var(env, x2)?;
@@ -569,7 +597,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
                 );
 
                 // 1. diff = x2 - x1
-                let diff = compiler.new_internal_var(
+                let diff = self.new_internal_var(
                     Value::LinearCombination(vec![(one, x2), (one.neg(), x1)], zero),
                     span,
                 );
@@ -583,7 +611,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
                 );
 
                 // 2. one_minus_res = 1 - res
-                let one_minus_res = compiler
+                let one_minus_res = self
                     .new_internal_var(Value::LinearCombination(vec![(one.neg(), res)], one), span);
 
                 self.add_generic_gate(
@@ -606,7 +634,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
                 );
 
                 // 4. diff_inv * diff = one_minus_res
-                let diff_inv = compiler.new_internal_var(Value::Inverse(diff), span);
+                let diff_inv = self.new_internal_var(Value::Inverse(diff), span);
 
                 self.add_generic_gate(
                     "constraint #4 for the equals gadget (diff_inv * diff = one_minus_res)",
@@ -623,7 +651,6 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
 
     fn if_else(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         cond: &Var<F>,
         then_: &Var<F>,
         else_: &Var<F>,
@@ -637,7 +664,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
         let mut vars = vec![];
 
         for (then_, else_) in then_.cvars.iter().zip(&else_.cvars) {
-            let var = self.if_else_inner(compiler, &cond, then_, else_, span);
+            let var = self.if_else_inner(&cond, then_, else_, span);
             vars.push(var[0]);
         }
 
@@ -646,7 +673,6 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
 
     fn if_else_inner(
         &self,
-        compiler: &mut crate::circuit_writer::CircuitWriter<F, B>,
         cond: &ConstOrCell<F>,
         then_: &ConstOrCell<F>,
         else_: &ConstOrCell<F>,
@@ -689,11 +715,11 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
             // res - X = 0
             //
             (ConstOrCell::Const(_), ConstOrCell::Const(_)) => {
-                let cond_then = self.mul(compiler, then_, cond, span);
+                let cond_then = self.mul(then_, cond, span);
                 let one = ConstOrCell::Const(F::one());
-                let one_minus_cond = self.sub(compiler, &one, cond, span);
-                let temp = self.mul(compiler, &one_minus_cond[0], else_, span);
-                self.add(compiler, &cond_then[0], &temp[0], span)
+                let one_minus_cond = self.sub(&one, cond, span);
+                let temp = self.mul(&one_minus_cond[0], else_, span);
+                self.add(&cond_then[0], &temp[0], span)
             }
 
             // if one of them is a var
@@ -718,7 +744,7 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
                 let then_clone = *then_;
                 let else_clone = *else_;
 
-                let res = compiler.new_internal_var(
+                let res = self.new_internal_var(
                     Value::Hint(Box::new(move |compiler, env| {
                         let cond = compiler.compute_var(env, cond_cell)?;
                         let res_var = if cond.is_one() {
@@ -734,11 +760,11 @@ impl<F: Field + PrettyField, B: Backend<F>> FieldConstraints<F, B> for KimchiBac
                     span,
                 );
 
-                let then_m_else = self.sub(compiler, then_, else_, span)[0]
+                let then_m_else = self.sub(then_, else_, span)[0]
                     .cvar()
                     .cloned()
                     .unwrap();
-                let res_m_else = self.sub(compiler, &ConstOrCell::Cell(res), else_, span)[0]
+                let res_m_else = self.sub(&ConstOrCell::Cell(res), else_, span)[0]
                     .cvar()
                     .cloned()
                     .unwrap();

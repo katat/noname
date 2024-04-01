@@ -4,8 +4,8 @@ use crate::{
     backends::Backend, circuit_writer::CircuitWriter, constants::Span, helpers::PrettyField, var::{ConstOrCell, Var}
 };
 
-pub mod boolean;
-pub mod field;
+// pub mod boolean;
+// pub mod field;
 
 pub trait BooleanConstraints<F: Field + PrettyField, B: Backend<F>> {
     fn is_valid(&self, f: F) -> bool {

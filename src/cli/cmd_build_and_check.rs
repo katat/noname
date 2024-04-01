@@ -5,7 +5,7 @@ use kimchi::mina_curves::pasta::Fp;
 use miette::{Context, IntoDiagnostic};
 
 use crate::{
-    backends::kimchi::KimchiBackend,
+    backends::{kimchi::KimchiBackend, Backend},
     circuit_writer::ProvingBackend,
     cli::packages::path_to_package,
     compiler::{compile, typecheck_next_file, Sources},
@@ -119,9 +119,9 @@ pub fn cmd_check(args: CmdCheck) -> miette::Result<()> {
     Ok(())
 }
 
-fn produce_all_asts<F: Field + PrettyField>(
+fn produce_all_asts<F: Field + PrettyField, B: Backend<F>>(
     path: &PathBuf,
-) -> miette::Result<(Sources, TypeChecker<F>)> {
+) -> miette::Result<(Sources, TypeChecker<F, B>)> {
     // find manifest
     let manifest = validate_package_and_get_manifest(&path, false)?;
 

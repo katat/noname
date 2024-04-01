@@ -27,6 +27,7 @@ use std::hash::Hash;
 
 use itertools::Itertools;
 
+use crate::backends::Backend;
 use crate::circuit_writer::writer::AnnotatedCell;
 use crate::circuit_writer::{CircuitWriter, DebugInfo};
 use crate::compiler::Sources;
@@ -36,7 +37,7 @@ use crate::{
     constants::{Field, Span},
 };
 
-impl<F: Field + PrettyField> CircuitWriter<F> {
+impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
     pub fn generate_asm(&self, sources: &Sources, debug: bool) -> String {
         let mut res = "".to_string();
 

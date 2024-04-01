@@ -69,7 +69,7 @@ impl<F: Field + FromStr + PrettyField, B: Backend<F>> CompiledCircuit<F, B> {
         Self { circuit }
     }
 
-    pub fn main_info(&self) -> &FnInfo<F> {
+    pub fn main_info(&self) -> &FnInfo<F, B> {
         self.circuit
             .main_info()
             .expect("constrait-writer bug: no main function found in witness generation")

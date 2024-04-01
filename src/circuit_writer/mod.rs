@@ -18,26 +18,14 @@ use self::writer::PendingGate;
 pub mod fn_env;
 pub mod writer;
 
-use num_traits::Zero;
-
-
-
-// enums for proving backends
-#[derive(Debug)]
-pub enum ProvingBackend<F: Field> {
-    Kimchi(KimchiBackend<F>),
-    R1CS(R1CSBackend),
-}
-
-
 //#[derive(Debug, Serialize, Deserialize)]
 #[derive(Debug)]
-pub struct CircuitWriter<F, B> where F: Field, B: Backend<F> {
+pub struct CircuitWriter<F, B> where F: Field + PrettyField, B: Backend<F> {
     /// The type checker state for the main module.
     // Important: this field must not be used directly.
     // This is because, depending on the value of [current_module],
     // the type checker state might be this one, or one of the ones in [dependencies].
-    typed: TypeChecker<F>,
+    typed: TypeChecker<F, B>,
 
     pub backend: B,
 
@@ -50,7 +38,7 @@ pub struct CircuitWriter<F, B> where F: Field, B: Backend<F> {
 
     /// This is how you compute the value of each variable during witness generation.
     /// It is created during circuit generation.
-    pub(crate) witness_vars: HashMap<usize, Value<F>>,
+    pub(crate) witness_vars: HashMap<usize, Value<F, B>>,
 
 
     /// Size of the public input.
@@ -102,7 +90,7 @@ impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
         self.typed.struct_info(qualified)
     }
 
-    pub fn fn_info(&self, qualified: &FullyQualified) -> Option<&FnInfo<F>> {
+    pub fn fn_info(&self, qualified: &FullyQualified) -> Option<&FnInfo<F, B>> {
         self.typed.fn_info(qualified)
     }
 
@@ -142,7 +130,7 @@ impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
     /// Retrieves the [FnInfo] for the `main()` function.
     /// This function should only be called if we know there's a main function,
     /// if there's no main function it'll panic.
-    pub fn main_info(&self) -> Result<&FnInfo<F>> {
+    pub fn main_info(&self) -> Result<&FnInfo<F, B>> {
         let qualified = FullyQualified::local("main".to_string());
         self.typed
             .fn_info(&qualified)
@@ -156,7 +144,7 @@ impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
 
 impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
     /// Creates a global environment from the one created by the type checker.
-    fn new(typed: TypeChecker<F>, backend: ProvingBackend<F>) -> Self {
+    fn new(typed: TypeChecker<F, B>, backend: B) -> Self {
         Self {
             typed,
             backend,
@@ -172,9 +160,9 @@ impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
     }
 
     pub fn generate_circuit(
-        typed: TypeChecker<F>,
-        backend: ProvingBackend<F>,
-    ) -> Result<CompiledCircuit<F>> {
+        typed: TypeChecker<F, B>,
+        backend: B,
+    ) -> Result<CompiledCircuit<F, B>> {
         // create circuit writer
         let mut circuit_writer = CircuitWriter::new(typed, backend);
 
@@ -251,51 +239,48 @@ impl<F: Field + PrettyField, B: Backend<F>> CircuitWriter<F, B> {
         // compile function
         circuit_writer.compile_main_function(fn_env, &function)?;
 
-        match circuit_writer.backend {
-            ProvingBackend::Kimchi(mut backend) => {
-                // important: there might still be a pending generic gate
-                if let Some(pending) = backend.pending_generic_gate.take() {
-                    backend.add_gate(
-                        pending.label,
-                        GateKind::DoubleGeneric,
-                        pending.vars,
-                        pending.coeffs,
-                        pending.span,
-                    );
-                }
+        // TODO: encapsulate the following in circuit writer so it works for different backends
 
-                // for sanity check, we make sure that every cellvar created has ended up in a gate
-                let mut written_vars = HashSet::new();
-                for row in &backend.rows_of_vars {
-                    row.iter().flatten().for_each(|cvar| {
-                        written_vars.insert(cvar.index);
-                    });
-                }
+        // important: there might still be a pending generic gate
+        if let Some(pending) = backend.pending_generic_gate.take() {
+            backend.add_gate(
+                pending.label,
+                GateKind::DoubleGeneric,
+                pending.vars,
+                pending.coeffs,
+                pending.span,
+            );
+        }
 
-                for var in 0..circuit_writer.next_variable {
-                    if !written_vars.contains(&var) {
-                        if circuit_writer.private_input_indices.contains(&var) {
-                            // compute main sig
-                            let (_main_sig, main_span) = {
-                                let fn_info = circuit_writer.main_info()?.clone();
-        
-                                (fn_info.sig().clone(), fn_info.span)
-                            };
-        
-                            // TODO: is this error useful?
-                            return Err(circuit_writer.error(ErrorKind::PrivateInputNotUsed, main_span));
-                        } else {
-                            panic!("there's a bug in the circuit_writer, some cellvar does not end up being a cellvar in the circuit!");
-                        }
-                    }
-                }
-        
-                // kimchi hack
-                if backend.gates.len() <= 2 {
-                    panic!("the circuit is either too small or does not constrain anything (TODO: better error)");
+        // for sanity check, we make sure that every cellvar created has ended up in a gate
+        let mut written_vars = HashSet::new();
+        for row in &backend.rows_of_vars {
+            row.iter().flatten().for_each(|cvar| {
+                written_vars.insert(cvar.index);
+            });
+        }
+
+        for var in 0..circuit_writer.next_variable {
+            if !written_vars.contains(&var) {
+                if circuit_writer.private_input_indices.contains(&var) {
+                    // compute main sig
+                    let (_main_sig, main_span) = {
+                        let fn_info = circuit_writer.main_info()?.clone();
+
+                        (fn_info.sig().clone(), fn_info.span)
+                    };
+
+                    // TODO: is this error useful?
+                    return Err(circuit_writer.error(ErrorKind::PrivateInputNotUsed, main_span));
+                } else {
+                    panic!("there's a bug in the circuit_writer, some cellvar does not end up being a cellvar in the circuit!");
                 }
             }
-            ProvingBackend::R1CS(_) => todo!(),
+        }
+
+        // kimchi hack
+        if backend.gates.len() <= 2 {
+            panic!("the circuit is either too small or does not constrain anything (TODO: better error)");
         }
 
         // we finalized!

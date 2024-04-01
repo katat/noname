@@ -1,13 +1,12 @@
 use std::str::FromStr;
 
-use ark_ff::{PrimeField, Zero};
+use ark_ff::Zero;
 use kimchi::circuits::polynomials::poseidon::{POS_ROWS_PER_HASH, ROUNDS_PER_ROW};
 use kimchi::mina_poseidon::constants::{PlonkSpongeConstantsKimchi, SpongeConstants};
 use kimchi::mina_poseidon::permutation::full_round;
-use kimchi::mina_poseidon::poseidon::ArithmeticSpongeParams;
 
+use crate::backends::Backend;
 use crate::circuit_writer::ProvingBackend;
-use crate::constants::KimchiField;
 use crate::helpers::PrettyField;
 use crate::imports::FnKind;
 use crate::lexer::Token;
@@ -28,12 +27,12 @@ use crate::{
 const POSEIDON_FN: &str = "poseidon(input: [Field; 2]) -> [Field; 3]";
 
 // pub const CRYPTO_FNS: [(&str, FnHandle<F>); 1] = [(POSEIDON_FN, poseidon<F>)];
-pub enum CryptoFn<F: Field> {
-    Poseidon(FnInfo<F>),
+pub enum CryptoFn<F: Field, B: Backend<F>> {
+    Poseidon(FnInfo<F, B>),
 }
 
-impl<F: Field + PrettyField> CryptoFn<F> {
-    pub fn from_str(s: &str) -> Result<CryptoFn<F>> {
+impl<F: Field + PrettyField, B: Backend<F>> CryptoFn<F, B> {
+    pub fn from_str(s: &str) -> Result<CryptoFn<F, B>> {
         let parse_fn =
             |sig: &'static str,
              fn_ptr: FnHandle<F>|
@@ -58,14 +57,14 @@ impl<F: Field + PrettyField> CryptoFn<F> {
         }
     }
 
-    pub fn fn_info(&self) -> &FnInfo<F> {
+    pub fn fn_info(&self) -> &FnInfo<F, B> {
         match self {
             CryptoFn::Poseidon(fn_info) => fn_info,
         }
     }
 
     // TODO: cache the functions, so it won't need to rerun this code that is unnecesasry
-    pub fn functions() -> Vec<CryptoFn<F>> {
+    pub fn functions() -> Vec<CryptoFn<F, B>> {
         let fn_names = [POSEIDON_FN];
         
         // create a collection of FnInfo from fn_names
@@ -76,8 +75,8 @@ impl<F: Field + PrettyField> CryptoFn<F> {
     }
 }
 
-pub fn poseidon<F: Field + FromStr + PrettyField>(
-    compiler: &mut CircuitWriter<F>,
+pub fn poseidon<F: Field + FromStr + PrettyField, B: Backend<F>>(
+    compiler: &mut CircuitWriter<F, B>,
     vars: &[VarInfo<F>],
     span: Span,
 ) -> Result<Option<Var<F>>> {
