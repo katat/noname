@@ -100,7 +100,7 @@ pub fn poseidon(
             for col in 0..3 {
                 // create each variable
                 let var = backend.new_internal_var(
-                    Value::Hint(Arc::new(move |backend, env| {
+                    Value::Hint(Box::new(move |backend, env| {
                         let x1 = backend.compute_var(env, prev_0)?;
                         let x2 = backend.compute_var(env, prev_1)?;
                         let x3 = backend.compute_var(env, prev_2)?;

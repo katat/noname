@@ -11,7 +11,7 @@ pub mod r1cs;
 
 /// Constraint Backend
 /// Each backend should implement this trait
-pub trait Backend: Clone {
+pub trait Backend {
     /// The circuit field / scalar field that the circuit is written on.
     type Field: Field + PrettyField;
 

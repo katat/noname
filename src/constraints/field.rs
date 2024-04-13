@@ -306,7 +306,7 @@ fn equal_cells<B: Backend>(
 
             // compute the result
             let res = backend.new_internal_var(
-                Value::Hint(Arc::new(move |compiler, env| {
+                Value::Hint(Box::new(move |compiler, env| {
                     let x1 = compiler.compute_var(env, x1)?;
                     let x2 = compiler.compute_var(env, x2)?;
                     if x1 == x2 {
@@ -467,7 +467,7 @@ pub fn if_else_inner<B: Backend>(
             let else_clone = *else_;
 
             let res = backend.new_internal_var(
-                Value::Hint(Arc::new(move |backend, env| {
+                Value::Hint(Box::new(move |backend, env| {
                     let cond = backend.compute_var(env, cond_cell)?;
                     let res_var = if cond.is_one() {
                         &then_clone

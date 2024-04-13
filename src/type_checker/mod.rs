@@ -147,7 +147,7 @@ impl<B: Backend> TypeChecker<B> {
             let qualified = FullyQualified::new(&builtin_module, &fn_info.sig().name.value);
             if type_checker
                 .functions
-                .insert(qualified, fn_info.clone())
+                .insert(qualified, fn_info)
                 .is_some()
             {
                 panic!("type-checker bug: global imports conflict");
@@ -160,7 +160,7 @@ impl<B: Backend> TypeChecker<B> {
             let qualified = FullyQualified::new(&crypto_module, &fn_info.sig().name.value);
             if type_checker
                 .functions
-                .insert(qualified, fn_info.clone())
+                .insert(qualified, fn_info)
                 .is_some()
             {
                 panic!("type-checker bug: global imports conflict");

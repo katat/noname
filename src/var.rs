@@ -39,15 +39,15 @@ pub type HintFn<B> = dyn Fn(
 ) -> Result<<B as Backend>::Field>;
 
 /// A variable's actual value in the witness can be computed in different ways.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub enum Value<B>
 where
-    B: Backend,
+    B: Backend + ?Sized,
 {
     /// Either it's a hint and can be computed from the outside.
     #[serde(skip)]
     // TODO: outch, remove hints? or https://docs.rs/serde_closure/latest/serde_closure/ ?
-    Hint(Arc<HintFn<B>>),
+    Hint(Box<HintFn<B>>),
 
     /// Or it's a constant (for example, I wrote `2` in the code).
     #[serde(skip)]

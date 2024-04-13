@@ -354,7 +354,7 @@ impl<B: Backend> CircuitWriter<B> {
                     FnKind::Native(func) => {
                         // module::fn_name(args)
                         // ^^^^^^
-                        self.compile_native_function_call(func, vars)
+                        self.compile_native_function_call(&func, vars)
                             .map(|r| r.map(VarOrRef::Var))
                     }
                 };

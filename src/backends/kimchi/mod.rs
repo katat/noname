@@ -81,7 +81,7 @@ pub struct GeneratedWitness<B: Backend> {
     pub public_outputs: Vec<B::Field>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct KimchiVesta {
     /// The gates created by the circuit generation.
     pub gates: Vec<Gate>,
