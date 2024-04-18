@@ -1,24 +1,25 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use ark_ff::{Field, Zero};
+use num_bigint::BigUint;
 
 use crate::{
-    circuit_writer::{DebugInfo, GateKind},
+    circuit_writer::GateKind,
     compiler::Sources,
     constants::Span,
     error::{Error, ErrorKind, Result},
-    helpers::PrettyField,
     imports::FnHandle,
     var::{CellVar, Value, Var},
     witness::WitnessEnv,
 };
 
 pub mod kimchi;
+pub mod r1cs;
 
 // TODO: should it be cloneable? It is now so because FnInfo needs to be cloneable.
 pub trait Backend: Clone {
     /// The circuit field / scalar field that the circuit is written on.
-    type Field: Field + PrettyField;
+    type Field: Field + FromStr + TryFrom<BigUint> + TryInto<BigUint> + Into<BigUint>;
 
     /// The generated witness type for the backend. Each backend may define its own witness format to be generated.
     type GeneratedWitness;
