@@ -189,13 +189,14 @@ mod tests {
     use constraint_writers::r1cs_writer::{
         ConstraintSection, HeaderData, R1CSWriter, SignalSection,
     };
+    use itertools::Itertools;
     use kimchi::o1_utils::FieldHelpers;
 
     use crate::{constants::Span, var::Value, witness::WitnessEnv};
 
     use super::*;
 
-    fn print_decimal<F: PrimeField>(field_elem: F) {
+    fn format_decimal<F: PrimeField>(field_elem: F) -> String {
         // Convert field element to its representative big integer
         let big_int = field_elem.into_repr();
 
@@ -206,7 +207,7 @@ mod tests {
         let big_uint = BigUint::from_bytes_le(&bytes); // Make sure to match endian-ness with the line above
 
         // Print the BigUint as a decimal string
-        println!("{}", big_uint.to_string());
+        big_uint.to_string()
     }
 
     pub fn port_r1cs(output: &str, r1cs_data: R1CS) -> Result<(), ()> {
@@ -351,10 +352,7 @@ mod tests {
 
             self.start_write_section(2);
 
-            let sorted_witness_id = witness.witness.keys().collect::<Vec<_>>();
-
-            let sorted_witness = sorted_witness_id
-                .iter()
+            let sorted_witness = witness.witness.keys().sorted()
                 .map(|id| witness.witness.get(id).unwrap())
                 .collect::<Vec<_>>();
             // map to big int
@@ -369,7 +367,10 @@ mod tests {
                 })
                 .collect::<Vec<_>>();
 
+            println!("Witnesses: ");
+
             for value in witness {
+                println!("{}", value.to_string());
                 self.write_big_int(value, n8 as usize);
             }
             self.end_write_section();
@@ -438,7 +439,7 @@ mod tests {
             terms: vec![(Fr::from(1), first_var)],
         };
         let mc = LinearCombination {
-            terms: vec![(Fr::from(-1), var_c)],
+            terms: vec![(Fr::from(1), var_c)],
         };
 
         r1cs.add_constraint(ma, mb, mc);
@@ -448,10 +449,11 @@ mod tests {
         let generated_witness = r1cs.generate_witness(witness_env, 2).unwrap();
 
         // sort key in asc and print each witness in decimal
-        let sorted_keys = generated_witness.witness.keys().collect::<Vec<_>>();
+        let sorted_keys = generated_witness.witness.keys().sorted();
+        println!("Witnesses: id / value");
         for key in sorted_keys {
             let val = generated_witness.witness.get(key).unwrap();
-            print_decimal(*val);
+            println!("{}: {}", key, format_decimal(*val));
         }
 
         let output_file = "./test.r1cs";
