@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
-use ark_bls12_381::Fq;
-use ark_ff::fields::Field;
+use ark_bls12_381::{Fr};
 use ark_ff::BigInteger;
+use ark_ff::{fields::Field, BigInteger384};
+use num_bigint_dig::BigInt;
 
 use crate::{
     helpers::PrettyField,
@@ -27,12 +28,32 @@ pub struct Constraint {
 
 #[derive(Clone)]
 pub struct LinearCombination {
-    pub terms: Vec<(Fq, CellVar)>,
+    pub terms: Vec<(Fr, CellVar)>,
 }
+
+// todo: replace with this form
+// pub struct LinearCombination {
+//     pub terms: HashMap<CellVar, Fq>,
+//     pub constant: Fq,
+// }
 
 impl Constraint {
     pub fn as_array(&self) -> [&LinearCombination; 3] {
         [&self.a, &self.b, &self.c]
+    }
+}
+
+use ark_ff::fields::PrimeField;
+
+impl LinearCombination {
+    pub fn to_bigint_values(&self) -> HashMap<usize, BigInt> {
+        let mut values = HashMap::new();
+        for (val, var) in &self.terms {
+            let converted_bigint =
+                BigInt::from_bytes_le(num_bigint_dig::Sign::Plus, &val.into_repr().to_bytes_le());
+            values.insert(var.index, converted_bigint);
+        }
+        values
     }
 }
 
@@ -57,11 +78,11 @@ impl R1CS {
 
 #[derive(Debug)]
 pub struct GeneratedWitness {
-    pub witness: HashMap<usize, Fq>,
+    pub witness: HashMap<usize, Fr>,
 }
 
 impl Backend for R1CS {
-    type Field = Fq;
+    type Field = Fr;
 
     type GeneratedWitness = GeneratedWitness;
 
@@ -132,7 +153,7 @@ impl Backend for R1CS {
         witness_env: &mut crate::witness::WitnessEnv<Self::Field>,
         public_input_size: usize,
     ) -> crate::error::Result<Self::GeneratedWitness> {
-        let mut witness = HashMap::<usize, Fq>::new();
+        let mut witness = HashMap::<usize, Fr>::new();
         for constraint in &self.constraints {
             for lc in &constraint.as_array() {
                 for (_, var) in &lc.terms {
@@ -159,7 +180,11 @@ mod tests {
     use std::collections::HashMap;
 
     use ark_ff::PrimeField;
-    use num_bigint::BigUint;
+    use constraint_writers::r1cs_writer::{
+        ConstraintSection, HeaderData, R1CSWriter, SignalSection,
+    };
+    use kimchi::o1_utils::FieldHelpers;
+    use num_bigint::{BigUint, ToBigInt};
 
     use crate::{constants::Span, var::Value, witness::WitnessEnv};
 
@@ -179,19 +204,69 @@ mod tests {
         println!("{}", big_uint.to_string());
     }
 
+    pub fn port_r1cs(output: &str, r1cs_data: R1CS) -> Result<(), ()> {
+        let prime = BigInt::from_bytes_le(num_bigint_dig::Sign::Plus, &Fr::modulus_biguint().to_bytes_le());
+        let field_size = if prime.bits() % 64 == 0 {
+            prime.bits() / 8
+        } else {
+            (prime.bits() / 64 + 1) * 8
+        };
+
+        println!("Field size: {}, size in bits: {}", field_size, Fr::size_in_bits());
+
+        let r1cs = R1CSWriter::new(output.to_string(), field_size as usize, false)?;
+        let mut constraint_section = R1CSWriter::start_constraints_section(r1cs)?;
+        let mut written = 0;
+
+        for constraint in r1cs_data.constraints {
+            // convert constraint terms to hashmap<usize, bigint>
+
+            ConstraintSection::write_constraint_usize(
+                &mut constraint_section,
+                &constraint.a.to_bigint_values(),
+                &constraint.b.to_bigint_values(),
+                &constraint.c.to_bigint_values(),
+            )?;
+            written += 1;
+        }
+
+        let r1cs = constraint_section.end_section()?;
+        let mut header_section = R1CSWriter::start_header_section(r1cs)?;
+        let header_data = HeaderData {
+            field: prime,
+            public_outputs: 0,
+            public_inputs: 2,
+            private_inputs: 0,
+            total_wires: r1cs_data.witness_vars.len(),
+            number_of_labels: 0,
+            number_of_constraints: written,
+        };
+        header_section.write_section(header_data)?;
+        let r1cs = header_section.end_section()?;
+        let mut signal_section = R1CSWriter::start_signal_section(r1cs)?;
+
+        for id in r1cs_data.witness_vars.keys() {
+            SignalSection::write_signal_usize(&mut signal_section, *id)?;
+        }
+        let r1cs = signal_section.end_section()?;
+        R1CSWriter::finish_writing(r1cs)?;
+
+        Ok(())
+    }
+
     #[test]
     fn test_arith() {
-        let a = Fq::from(9);
-        let b = Fq::from(10);
+        let a = Fr::from(9);
+        let b = Fr::from(10);
 
-        assert_eq!(a, Fq::from(9)); // 26 =  9 mod 17
-                                    // assert_eq!(a - b, Fq::from(16));      // -1 = 16 mod 17
-        assert_eq!(a + b, Fq::from(19)); // 19 =  2 mod 17
-        assert_eq!(a * b, Fq::from(90)); // 90 =  5 mod 17
-                                         // assert_eq!(a.square(), Fq::from(13)); // 81 = 13 mod 17
-                                         // assert_eq!(b.double(), Fq::from(3));  // 20 =  3 mod 17
+        assert_eq!(a, Fr::from(9)); // 26 =  9 mod 17
+                                    // assert_eq!(a - b, Fr::from(16));      // -1 = 16 mod 17
+        assert_eq!(a + b, Fr::from(19)); // 19 =  2 mod 17
+        assert_eq!(a * b, Fr::from(90)); // 90 =  5 mod 17
+                                         // assert_eq!(a.square(), Fr::from(13)); // 81 = 13 mod 17
+                                         // assert_eq!(b.double(), Fr::from(3));  // 20 =  3 mod 17
                                          // assert_eq!(a / b, a * b.inverse().unwrap()); // need to unwrap since `b` could be 0 which is not invertible
-                                         // assert_eq!(a.pow(b.into_bigint()), Fq::from(13)); // pow takes BigInt as input
+                                         // assert_eq!(a.pow(b.into_bigint()), Fr::from(13)); // pow takes BigInt as input
     }
 
     #[test]
@@ -203,17 +278,17 @@ mod tests {
         let mut r1cs = R1CS::new();
 
         // first var of r1cs is always 1
-        let first_var = r1cs.new_internal_var(Value::Constant(Fq::from(1)), Span::default());
+        let first_var = r1cs.new_internal_var(Value::Constant(Fr::from(1)), Span::default());
 
         // public input a, b and e
-        let var_a = r1cs.new_internal_var(Value::Constant(Fq::from(1)), Span::default());
-        let var_b = r1cs.new_internal_var(Value::Constant(Fq::from(2)), Span::default());
+        let var_a = r1cs.new_internal_var(Value::Constant(Fr::from(1)), Span::default());
+        let var_b = r1cs.new_internal_var(Value::Constant(Fr::from(2)), Span::default());
 
         // a + b = c
         let var_c = r1cs.new_internal_var(
             Value::LinearCombination(
-                vec![(Fq::from(1), var_a), (Fq::from(1), var_b)],
-                Fq::from(0),
+                vec![(Fr::from(1), var_a), (Fr::from(1), var_b)],
+                Fr::from(0),
             ),
             Span::default(),
         );
@@ -222,13 +297,13 @@ mod tests {
         // ma * mb = mc
         // = (a + b)*1 - c = 0
         let ma = LinearCombination {
-            terms: vec![(Fq::from(1), var_a), (Fq::from(1), var_b)],
+            terms: vec![(Fr::from(1), var_a), (Fr::from(1), var_b)],
         };
         let mb = LinearCombination {
-            terms: vec![(Fq::from(1), first_var)],
+            terms: vec![(Fr::from(1), first_var)],
         };
         let mc = LinearCombination {
-            terms: vec![(Fq::from(-1), var_c)],
+            terms: vec![(Fr::from(-1), var_c)],
         };
 
         r1cs.add_constraint(ma, mb, mc);
@@ -244,11 +319,14 @@ mod tests {
             print_decimal(*val);
         }
 
+        let output_file = "./test.r1cs";
+        port_r1cs(&output_file, r1cs);
+
         // c + e = f
         // let f = CellVar::new(5, Span::default());
         // witness_vars.insert(
         //     f.index,
-        //     Value::<R1CS>::LinearCombination(vec![(Fq::from(1), c), (Fq::from(1), e)], Fq::from(0)),
+        //     Value::<R1CS>::LinearCombination(vec![(Fr::from(1), c), (Fr::from(1), e)], Fr::from(0)),
         // );
 
         // a * b = c

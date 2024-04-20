@@ -29,3 +29,5 @@ serde_json = "1.0.85"                                # to (de)serialize JSON
 serde = "1.0.144"                                    # to (de)serialize objects
 thiserror = "1.0.31"                                 # helpful error traits
 toml = "0.8.8"                                       # to parse manifest files
+constraint_writers = { git = "https://github.com/iden3/circom.git", tag = "v2.1.8"}
+num-bigint-dig = "0.6.0"
