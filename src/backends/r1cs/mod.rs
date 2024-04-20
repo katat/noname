@@ -469,6 +469,16 @@ mod tests {
         witness_writer.write(&generated_witness, prime);
         println!("Witness file written to ./test.wtns");
 
+        // snarkjs powersoftau new bls12-381 12 pot12_0000.ptau -v\n
+        // snarkjs powersoftau contribute pot12_0000.ptau pot12_0001.ptau --name="First contribution" -v\n
+        // snarkjs powersoftau prepare phase2 pot12_0001.ptau pot12_final.ptau -v\n
+        // snarkjs groth16 setup test.r1cs pot12_final.ptau test_0000.zkey\n
+        // snarkjs zkey contribute test_0000.zkey test_0001.zkey --name="1st Contributor Name" -v\n
+        // snarkjs zkey export verificationkey test_0001.zkey verification_key.json\n
+        // snarkjs groth16 prove test_0001.zkey test.wtns proof.json public.json\n
+        // snarkjs groth16 verify verification_key.json public.json proof.json\n
+        // should display "snarkJS: OK!"
+
         // c + e = f
         // let f = CellVar::new(5, Span::default());
         // witness_vars.insert(
