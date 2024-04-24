@@ -6,7 +6,7 @@ use ark_bls12_381::Fr;
 use ark_ff::{BigInteger, Zero};
 use num_bigint_dig::BigInt;
 
-use crate::var::{CellVar, Value};
+use crate::{circuit_writer::DebugInfo, var::{CellVar, Value}};
 
 use super::Backend;
 
@@ -16,6 +16,7 @@ pub struct R1CS {
     pub constraints: Vec<Constraint>,
     pub next_variable: usize,
     pub witness_vars: HashMap<usize, Value<R1CS>>,
+    pub debug_info: Vec<DebugInfo>,
 }
 
 #[derive(Clone)]
@@ -72,15 +73,24 @@ impl R1CS {
             constraints: Vec::new(),
             next_variable: 0,
             witness_vars: HashMap::new(),
+            debug_info: Vec::new(),
         }
     }
 
     pub fn add_constraint(
         &mut self,
+        note: &str,
         a: LinearCombination,
         b: LinearCombination,
         c: LinearCombination,
+        span: crate::constants::Span,
     ) {
+        let debug_info = DebugInfo {
+            note: note.to_string(),
+            span,
+        };
+        self.debug_info.push(debug_info);
+
         self.constraints.push(Constraint { a, b, c });
     }
 }
@@ -190,7 +200,11 @@ impl Backend for R1CS {
             constant: Some(zero),
         };
 
-        self.add_constraint(a, b, c);
+        self.add_constraint(
+            "neg constraint: x + (-x) = 0",
+            a, b, c,
+            span
+        );
 
         x_neg
     }
@@ -224,7 +238,11 @@ impl Backend for R1CS {
             constant: None,
         };
 
-        self.add_constraint(a, b, c);
+        self.add_constraint(
+            "add constraint: lhs + rhs = res",
+            a, b, c,
+            span
+        );
 
         res
     }
@@ -257,7 +275,11 @@ impl Backend for R1CS {
             constant: None,
         };
 
-        self.add_constraint(a, b, c);
+        self.add_constraint(
+            "add constraint: x + cst = res",
+            a, b, c,
+            span
+        );
 
         res
     }
@@ -290,7 +312,11 @@ impl Backend for R1CS {
             constant: None,
         };
 
-        self.add_constraint(a, b, c);
+        self.add_constraint(
+            "mul constraint: lhs * rhs = res",
+            a, b, c,
+            span
+        );
 
         res
     }
@@ -323,7 +349,11 @@ impl Backend for R1CS {
             constant: None,
         };
 
-        self.add_constraint(a, b, c);
+        self.add_constraint(
+            "mul constraint: x * cst = res",
+            a, b, c,
+            span
+        );
 
         res
     }
@@ -354,7 +384,11 @@ impl Backend for R1CS {
             constant: Some(cst),
         };
 
-        self.add_constraint(a, b, c);
+        self.add_constraint(
+            "eq constraint: x = cst",
+            a, b, c,
+            span
+        );
     }
 
     /// to constraint:
@@ -383,7 +417,11 @@ impl Backend for R1CS {
             constant: None,
         };
 
-        self.add_constraint(a, b, c);
+        self.add_constraint(
+            "eq constraint: lhs = rhs",
+            a, b, c,
+            span
+        );
     }
     
     /// todo: how does circom constraint this?
@@ -665,7 +703,7 @@ mod tests {
             constant: None,
         };
 
-        r1cs.add_constraint(ma, mb, mc);
+        r1cs.add_constraint("", ma, mb, mc, Span::default());
 
         // check witness
         let witness_env = &mut WitnessEnv::default();
