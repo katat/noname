@@ -27,9 +27,9 @@ pub struct Constraint {
 
 #[derive(Clone)]
 pub struct LinearCombination {
-    pub terms: HashMap<CellVar, Fr>,
+    pub terms: Option<HashMap<CellVar, Fr>>,
     // todo: how do we use this constant?
-    pub constant: Fr,
+    pub constant: Option<Fr>,
 }
 
 impl Constraint {
@@ -42,20 +42,20 @@ use ark_ff::fields::PrimeField;
 
 impl LinearCombination {
     pub fn to_bigint_values(&self) -> HashMap<usize, BigInt> {
-        let zero = Fr::zero();
-
         let mut values = HashMap::new();
-        for (var, factor) in &self.terms {
-            let factor_bigint =
-                BigInt::from_bytes_le(num_bigint_dig::Sign::Plus, &factor.into_repr().to_bytes_le());
-            values.insert(var.index, factor_bigint);
+        if let Some(terms) = &self.terms {
+            for (var, factor) in terms {
+                let factor_bigint =
+                    BigInt::from_bytes_le(num_bigint_dig::Sign::Plus, &factor.into_repr().to_bytes_le());
+                values.insert(var.index, factor_bigint);
+            }
         }
 
         // todo: should the constant be the factor of the first var which is always 1? is this correct way to constraint a constant?
-        if self.constant != zero {
+        if let Some(constant) = &self.constant {
             let constant_bigint = BigInt::from_bytes_le(
                 num_bigint_dig::Sign::Plus,
-                &self.constant.into_repr().to_bytes_le(),
+                &constant.into_repr().to_bytes_le(),
             );
 
             // var at 0 index always has the value 1
@@ -143,12 +143,14 @@ impl Backend for R1CS {
         let mut witness = HashMap::<usize, Fr>::new();
         for constraint in &self.constraints {
             for lc in &constraint.as_array() {
-                for var in lc.terms.keys() {
-                    if witness.contains_key(&var.index) {
-                        continue;
+                if let Some(terms) = &lc.terms {
+                    for var in terms.keys() {
+                        if witness.contains_key(&var.index) {
+                            continue;
+                        }
+                        let val = self.compute_var(witness_env, *var)?;
+                        witness.insert(var.index, val);
                     }
-                    let val = self.compute_var(witness_env, *var)?;
-                    witness.insert(var.index, val);
                 }
             }
             // todo: check if the constraint is satisfied
@@ -170,12 +172,12 @@ impl Backend for R1CS {
         let x_neg = self.new_internal_var(Value::LinearCombination(vec![(one.neg(), *var)], zero), span);
 
         let a = LinearCombination {
-            terms: HashMap::from_iter(vec![(*var, one), (x_neg, one)]),
-            constant: zero,
+            terms: Some(HashMap::from_iter(vec![(*var, one), (x_neg, one)])),
+            constant: None,
         };
         let b = LinearCombination {
-            terms: HashMap::new(),
-            constant: zero,
+            terms: Some(HashMap::new()),
+            constant: None,
         };
 
         todo!()
@@ -470,16 +472,16 @@ mod tests {
         // ma * mb = mc
         // = (a + b)*1 - c = 0
         let ma = LinearCombination {
-            terms: HashMap::from_iter(vec![(var_a, Fr::from(1)), (var_b, Fr::from(1))]),
-            constant: Fr::from(0),
+            terms: Some(HashMap::from_iter(vec![(var_a, Fr::from(1)), (var_b, Fr::from(1))])),
+            constant: None,
         };
         let mb = LinearCombination {
-            terms: HashMap::new(),
-            constant: Fr::from(1),
+            terms: None,
+            constant: Some(Fr::from(1)),
         };
         let mc = LinearCombination {
-            terms: HashMap::from_iter(vec![(var_c, Fr::from(1))]),
-            constant: Fr::from(0),
+            terms: Some(HashMap::from_iter(vec![(var_c, Fr::from(1))])),
+            constant: None,
         };
 
         r1cs.add_constraint(ma, mb, mc);
