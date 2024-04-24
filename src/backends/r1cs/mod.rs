@@ -3,14 +3,10 @@ use std::collections::HashMap;
 // use num_bigint::{BigUint, ToBigUint};
 use std::ops::Neg;
 use ark_bls12_381::Fr;
-use ark_ff::BigInteger;
-use ark_ff::{fields::Field, BigInteger384};
-use num_bigint_dig::{BigInt, BigUint};
+use ark_ff::{BigInteger, Zero};
+use num_bigint_dig::BigInt;
 
-use crate::{
-    helpers::PrettyField,
-    var::{CellVar, ConstOrCell, Value},
-};
+use crate::var::{CellVar, Value};
 
 use super::Backend;
 
@@ -46,12 +42,26 @@ use ark_ff::fields::PrimeField;
 
 impl LinearCombination {
     pub fn to_bigint_values(&self) -> HashMap<usize, BigInt> {
+        let zero = Fr::zero();
+
         let mut values = HashMap::new();
         for (var, factor) in &self.terms {
             let factor_bigint =
                 BigInt::from_bytes_le(num_bigint_dig::Sign::Plus, &factor.into_repr().to_bytes_le());
             values.insert(var.index, factor_bigint);
         }
+
+        // todo: should the constant be the factor of the first var which is always 1? is this correct way to constraint a constant?
+        if self.constant != zero {
+            let constant_bigint = BigInt::from_bytes_le(
+                num_bigint_dig::Sign::Plus,
+                &self.constant.into_repr().to_bytes_le(),
+            );
+
+            // var at 0 index always has the value 1
+            values.insert(0, constant_bigint);
+        }
+
         values
     }
 }
@@ -218,6 +228,7 @@ mod tests {
     };
     use itertools::Itertools;
     use kimchi::o1_utils::FieldHelpers;
+    use num_bigint_dig::BigUint;
 
     use crate::{constants::Span, var::Value, witness::WitnessEnv};
 
@@ -441,7 +452,6 @@ mod tests {
         let mut r1cs = R1CS::new();
 
         // first var of r1cs is always 1
-        let first_var = r1cs.new_internal_var(Value::Constant(Fr::from(1)), Span::default());
 
         // public input a, b and e
         let var_a = r1cs.new_internal_var(Value::Constant(Fr::from(1)), Span::default());
@@ -464,8 +474,8 @@ mod tests {
             constant: Fr::from(0),
         };
         let mb = LinearCombination {
-            terms: HashMap::from_iter(vec![(first_var, Fr::from(1))]),
-            constant: Fr::from(0),
+            terms: HashMap::new(),
+            constant: Fr::from(1),
         };
         let mc = LinearCombination {
             terms: HashMap::from_iter(vec![(var_c, Fr::from(1))]),
