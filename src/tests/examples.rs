@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::{
-    backends::kimchi::{KimchiVesta, VestaField},
+    backends::{kimchi::{KimchiVesta, VestaField}, r1cs::R1CS},
     compiler::{compile, typecheck_next_file, Sources},
     inputs::{parse_inputs, ExtField},
     type_checker::TypeChecker,
@@ -33,6 +33,10 @@ fn test_file(
     )
     .unwrap();
 
+    // todo: loop through different backends
+    // other backends may not support testing proving and verification
+    // so they are mainly testing if the constraints satisfied
+    // but is there a way to automaticlaly test if it is under constrained?
     let kimchi_vesta = KimchiVesta::new(false);
 
     let compiled_circuit = compile(&sources, tast, kimchi_vesta)?;
@@ -78,6 +82,48 @@ fn test_file(
     Ok(())
 }
 
+fn test_file_r1cs(
+    file_name: &str,
+    public_inputs: &str,
+    private_inputs: &str,
+    expected_public_output: Vec<VestaField>,
+) -> miette::Result<()> {
+    let version = env!("CARGO_MANIFEST_DIR");
+    let prefix = Path::new(version).join("examples");
+
+    // read noname file
+    let code = std::fs::read_to_string(prefix.clone().join(format!("{file_name}.no"))).unwrap();
+
+    // compile
+    let mut sources = Sources::new();
+    let mut tast = TypeChecker::new();
+    let this_module = None;
+    let _node_id = typecheck_next_file(
+        &mut tast,
+        this_module,
+        &mut sources,
+        file_name.to_string(),
+        code.clone(),
+        0,
+    )
+    .unwrap();
+
+    let r1cs = R1CS::new();
+
+    let compiled_circuit = compile(&sources, tast, r1cs)?;
+
+    // parse inputs
+    let public_inputs = parse_inputs(public_inputs).unwrap();
+    let private_inputs = parse_inputs(private_inputs).unwrap();
+
+    // create r1cs and wtns files
+    let generated_witness = compiled_circuit.generate_witness(public_inputs, private_inputs).unwrap();
+    compiled_circuit.circuit.backend.gen_r1cs_file("test.r1cs");
+    compiled_circuit.circuit.backend.gen_wtns_file("test.wtns", generated_witness);
+
+    Ok(())
+}
+
 #[test]
 fn test_arithmetic() -> miette::Result<()> {
     let public_inputs = r#"{"public_input": "1"}"#;
@@ -87,6 +133,19 @@ fn test_arithmetic() -> miette::Result<()> {
     println!("private inputs: {:?}", private_inputs);
 
     test_file("arithmetic", public_inputs, private_inputs, vec![])?;
+
+    Ok(())
+}
+
+#[test]
+fn test_arithmetic_r1cs() -> miette::Result<()> {
+    let public_inputs = r#"{"public_input": "1"}"#;
+    let private_inputs = r#"{"private_input": "1"}"#;
+
+    println!("public inputs: {:?}", public_inputs);
+    println!("private inputs: {:?}", private_inputs);
+
+    test_file_r1cs("arithmetic", public_inputs, private_inputs, vec![])?;
 
     Ok(())
 }
