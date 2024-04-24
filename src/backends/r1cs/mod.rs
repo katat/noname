@@ -31,14 +31,9 @@ pub struct Constraint {
 
 #[derive(Clone)]
 pub struct LinearCombination {
-    pub terms: Vec<(Fr, CellVar)>,
+    pub terms: HashMap<CellVar, Fr>,
+    pub constant: Fr,
 }
-
-// todo: replace with this form
-// pub struct LinearCombination {
-//     pub terms: HashMap<CellVar, Fq>,
-//     pub constant: Fq,
-// }
 
 impl Constraint {
     pub fn as_array(&self) -> [&LinearCombination; 3] {
@@ -51,7 +46,7 @@ use ark_ff::fields::PrimeField;
 impl LinearCombination {
     pub fn to_bigint_values(&self) -> HashMap<usize, BigInt> {
         let mut values = HashMap::new();
-        for (val, var) in &self.terms {
+        for (var, val) in &self.terms {
             let converted_bigint =
                 BigInt::from_bytes_le(num_bigint_dig::Sign::Plus, &val.into_repr().to_bytes_le());
             values.insert(var.index, converted_bigint);
@@ -120,27 +115,6 @@ impl Backend for R1CS {
         todo!()
     }
 
-    fn add_gate(
-        &mut self,
-        note: &'static str,
-        typ: crate::circuit_writer::GateKind,
-        vars: Vec<Option<CellVar>>,
-        coeffs: Vec<Self::Field>,
-        span: crate::constants::Span,
-    ) {
-        todo!()
-    }
-
-    fn add_generic_gate(
-        &mut self,
-        label: &'static str,
-        vars: Vec<Option<CellVar>>,
-        coeffs: Vec<Self::Field>,
-        span: crate::constants::Span,
-    ) {
-        todo!()
-    }
-
     fn finalize_circuit(
         &mut self,
         public_output: Option<crate::var::Var<Self::Field>>,
@@ -154,12 +128,11 @@ impl Backend for R1CS {
     fn generate_witness(
         &self,
         witness_env: &mut crate::witness::WitnessEnv<Self::Field>,
-        public_input_size: usize,
     ) -> crate::error::Result<Self::GeneratedWitness> {
         let mut witness = HashMap::<usize, Fr>::new();
         for constraint in &self.constraints {
             for lc in &constraint.as_array() {
-                for (_, var) in &lc.terms {
+                for var in lc.terms.keys() {
                     if witness.contains_key(&var.index) {
                         continue;
                     }
@@ -167,12 +140,49 @@ impl Backend for R1CS {
                     witness.insert(var.index, val);
                 }
             }
+            // todo: check if the constraint is satisfied
         }
 
         Ok(GeneratedWitness { witness })
     }
 
     fn generate_asm(&self, sources: &crate::compiler::Sources, debug: bool) -> String {
+        todo!()
+    }
+    
+    fn constraint_neg(&mut self, var: &CellVar, span: crate::constants::Span) -> CellVar {
+        todo!()
+    }
+    
+    fn constraint_add(&mut self, lhs: &CellVar, rhs: &CellVar, span: crate::constants::Span) -> CellVar {
+        todo!()
+    }
+    
+    fn constraint_add_const(&mut self, var: &CellVar, cst: &Self::Field, span: crate::constants::Span) -> CellVar {
+        todo!()
+    }
+    
+    fn constraint_mul(&mut self, lhs: &CellVar, rhs: &CellVar, span: crate::constants::Span) -> CellVar {
+        todo!()
+    }
+    
+    fn constraint_mul_const(&mut self, var: &CellVar, cst: &Self::Field, span: crate::constants::Span) -> CellVar {
+        todo!()
+    }
+    
+    fn constraint_eq_const(&mut self, var: &CellVar, cst: Self::Field, span: crate::constants::Span) {
+        todo!()
+    }
+
+    fn constraint_eq_var(&mut self, lhs: &CellVar, rhs: &CellVar, span: crate::constants::Span) {
+        todo!()
+    }
+    
+    fn constraint_public_input(&mut self, val: Value<Self>, span: crate::constants::Span) -> CellVar {
+        todo!()
+    }
+    
+    fn constraint_public_output(&mut self, val: Value<Self>, span: crate::constants::Span) -> CellVar {
         todo!()
     }
 }
@@ -433,20 +443,23 @@ mod tests {
         // ma * mb = mc
         // = (a + b)*1 - c = 0
         let ma = LinearCombination {
-            terms: vec![(Fr::from(1), var_a), (Fr::from(1), var_b)],
+            terms: HashMap::from_iter(vec![(var_a, Fr::from(1)), (var_b, Fr::from(1))]),
+            constant: Fr::from(0),
         };
         let mb = LinearCombination {
-            terms: vec![(Fr::from(1), first_var)],
+            terms: HashMap::from_iter(vec![(first_var, Fr::from(1))]),
+            constant: Fr::from(0),
         };
         let mc = LinearCombination {
-            terms: vec![(Fr::from(1), var_c)],
+            terms: HashMap::from_iter(vec![(var_c, Fr::from(1))]),
+            constant: Fr::from(0),
         };
 
         r1cs.add_constraint(ma, mb, mc);
 
         // check witness
         let witness_env = &mut WitnessEnv::default();
-        let generated_witness = r1cs.generate_witness(witness_env, 2).unwrap();
+        let generated_witness = r1cs.generate_witness(witness_env).unwrap();
 
         // sort key in asc and print each witness in decimal
         let sorted_keys = generated_witness.witness.keys().sorted();
