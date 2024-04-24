@@ -80,9 +80,7 @@ impl R1CS {
     pub fn add_constraint(
         &mut self,
         note: &str,
-        a: LinearCombination,
-        b: LinearCombination,
-        c: LinearCombination,
+        c: Constraint,
         span: crate::constants::Span,
     ) {
         let debug_info = DebugInfo {
@@ -91,7 +89,7 @@ impl R1CS {
         };
         self.debug_info.push(debug_info);
 
-        self.constraints.push(Constraint { a, b, c });
+        self.constraints.push(c);
     }
 }
 
@@ -202,7 +200,7 @@ impl Backend for R1CS {
 
         self.add_constraint(
             "neg constraint: x + (-x) = 0",
-            a, b, c,
+            Constraint{a, b, c},
             span
         );
 
@@ -240,7 +238,7 @@ impl Backend for R1CS {
 
         self.add_constraint(
             "add constraint: lhs + rhs = res",
-            a, b, c,
+            Constraint{a, b, c},
             span
         );
 
@@ -277,7 +275,7 @@ impl Backend for R1CS {
 
         self.add_constraint(
             "add constraint: x + cst = res",
-            a, b, c,
+            Constraint{a, b, c},
             span
         );
 
@@ -314,7 +312,7 @@ impl Backend for R1CS {
 
         self.add_constraint(
             "mul constraint: lhs * rhs = res",
-            a, b, c,
+            Constraint{a, b, c},
             span
         );
 
@@ -351,7 +349,7 @@ impl Backend for R1CS {
 
         self.add_constraint(
             "mul constraint: x * cst = res",
-            a, b, c,
+            Constraint{a, b, c},
             span
         );
 
@@ -386,7 +384,7 @@ impl Backend for R1CS {
 
         self.add_constraint(
             "eq constraint: x = cst",
-            a, b, c,
+            Constraint{a, b, c},
             span
         );
     }
@@ -419,7 +417,7 @@ impl Backend for R1CS {
 
         self.add_constraint(
             "eq constraint: lhs = rhs",
-            a, b, c,
+            Constraint{a, b, c},
             span
         );
     }
@@ -703,7 +701,7 @@ mod tests {
             constant: None,
         };
 
-        r1cs.add_constraint("", ma, mb, mc, Span::default());
+        r1cs.add_constraint("", Constraint{a: ma, b: mb, c: mc}, Span::default());
 
         // check witness
         let witness_env = &mut WitnessEnv::default();
