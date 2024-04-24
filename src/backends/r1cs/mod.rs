@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 // use num_bigint::{BigUint, ToBigUint};
-
+use std::ops::Neg;
 use ark_bls12_381::Fr;
 use ark_ff::BigInteger;
 use ark_ff::{fields::Field, BigInteger384};
@@ -32,6 +32,7 @@ pub struct Constraint {
 #[derive(Clone)]
 pub struct LinearCombination {
     pub terms: HashMap<CellVar, Fr>,
+    // todo: how do we use this constant?
     pub constant: Fr,
 }
 
@@ -46,10 +47,10 @@ use ark_ff::fields::PrimeField;
 impl LinearCombination {
     pub fn to_bigint_values(&self) -> HashMap<usize, BigInt> {
         let mut values = HashMap::new();
-        for (var, val) in &self.terms {
-            let converted_bigint =
-                BigInt::from_bytes_le(num_bigint_dig::Sign::Plus, &val.into_repr().to_bytes_le());
-            values.insert(var.index, converted_bigint);
+        for (var, factor) in &self.terms {
+            let factor_bigint =
+                BigInt::from_bytes_le(num_bigint_dig::Sign::Plus, &factor.into_repr().to_bytes_le());
+            values.insert(var.index, factor_bigint);
         }
         values
     }
@@ -151,6 +152,22 @@ impl Backend for R1CS {
     }
     
     fn constraint_neg(&mut self, var: &CellVar, span: crate::constants::Span) -> CellVar {
+        // ma * mb = mc
+        // x + (-x) = 0
+        let one = Fr::from(1);
+        let zero = Fr::from(0);
+
+        let x_neg = self.new_internal_var(Value::LinearCombination(vec![(one.neg(), *var)], zero), span);
+
+        let a = LinearCombination {
+            terms: HashMap::from_iter(vec![(*var, one), (x_neg, one)]),
+            constant: zero,
+        };
+        let b = LinearCombination {
+            terms: HashMap::new(),
+            constant: zero,
+        };
+
         todo!()
     }
     
