@@ -163,9 +163,15 @@ impl Backend for R1CS {
         todo!()
     }
     
+    /// to constraint:
+    /// x + (-x) = 0
+    /// given:
+    /// a * b = c
+    /// so:
+    /// a = x + (-x)
+    /// b = 1
+    /// c = 0
     fn constraint_neg(&mut self, var: &CellVar, span: crate::constants::Span) -> CellVar {
-        // ma * mb = mc
-        // x + (-x) = 0
         let one = Fr::from(1);
         let zero = Fr::from(0);
 
@@ -176,11 +182,17 @@ impl Backend for R1CS {
             constant: None,
         };
         let b = LinearCombination {
-            terms: Some(HashMap::new()),
-            constant: None,
+            terms: None,
+            constant: Some(one),
+        };
+        let c = LinearCombination {
+            terms: None,
+            constant: Some(zero),
         };
 
-        todo!()
+        self.add_constraint(a, b, c);
+
+        x_neg
     }
     
     fn constraint_add(&mut self, lhs: &CellVar, rhs: &CellVar, span: crate::constants::Span) -> CellVar {
