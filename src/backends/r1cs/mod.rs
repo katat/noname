@@ -167,18 +167,18 @@ impl Backend for R1CS {
     /// x + (-x) = 0
     /// given:
     /// a * b = c
-    /// so:
+    /// then:
     /// a = x + (-x)
     /// b = 1
     /// c = 0
-    fn constraint_neg(&mut self, var: &CellVar, span: crate::constants::Span) -> CellVar {
+    fn constraint_neg(&mut self, x: &CellVar, span: crate::constants::Span) -> CellVar {
         let one = Fr::from(1);
         let zero = Fr::from(0);
 
-        let x_neg = self.new_internal_var(Value::LinearCombination(vec![(one.neg(), *var)], zero), span);
+        let x_neg = self.new_internal_var(Value::LinearCombination(vec![(one.neg(), *x)], zero), span);
 
         let a = LinearCombination {
-            terms: Some(HashMap::from_iter(vec![(*var, one), (x_neg, one)])),
+            terms: Some(HashMap::from_iter(vec![(*x, one), (x_neg, one)])),
             constant: None,
         };
         let b = LinearCombination {
@@ -195,34 +195,203 @@ impl Backend for R1CS {
         x_neg
     }
     
+    /// to constraint:
+    /// lhs + rhs = res
+    /// given:
+    /// a * b = c
+    /// then:
+    /// a = lhs + rhs
+    /// b = 1
+    /// c = res
     fn constraint_add(&mut self, lhs: &CellVar, rhs: &CellVar, span: crate::constants::Span) -> CellVar {
-        todo!()
+        let one = Fr::from(1);
+        let zero = Fr::from(0);
+
+        let res = self.new_internal_var(Value::LinearCombination(vec![(one, *lhs), (one, *rhs)], zero), span);
+
+        let a = LinearCombination {
+            terms: Some(HashMap::from_iter(vec![(*lhs, one), (*rhs, one)])),
+            constant: None,
+        };
+
+        let b = LinearCombination {
+            terms: None,
+            constant: Some(one),
+        };
+
+        let c = LinearCombination {
+            terms: Some(HashMap::from_iter(vec![(res, one)])),
+            constant: None,
+        };
+
+        self.add_constraint(a, b, c);
+
+        res
     }
     
-    fn constraint_add_const(&mut self, var: &CellVar, cst: &Self::Field, span: crate::constants::Span) -> CellVar {
-        todo!()
+    /// to constraint:
+    /// x + cst = res
+    /// given:
+    /// a * b = c
+    /// then:
+    /// a = x + cst
+    /// b = 1
+    /// c = res
+    fn constraint_add_const(&mut self, x: &CellVar, cst: &Self::Field, span: crate::constants::Span) -> CellVar {
+        let one = Fr::from(1);
+
+        let res = self.new_internal_var(Value::LinearCombination(vec![(one, *x)], *cst), span);
+
+        let a = LinearCombination {
+            terms: Some(HashMap::from_iter(vec![(*x, one)])),
+            constant: Some(*cst),
+        };
+
+        let b = LinearCombination {
+            terms: None,
+            constant: Some(one),
+        };
+
+        let c = LinearCombination {
+            terms: Some(HashMap::from_iter(vec![(res, one)])),
+            constant: None,
+        };
+
+        self.add_constraint(a, b, c);
+
+        res
     }
     
+    /// to constraint:
+    /// lhs * rhs = res
+    /// given:
+    /// a * b = c
+    /// then:
+    /// a = lhs
+    /// b = rhs
+    /// c = res
     fn constraint_mul(&mut self, lhs: &CellVar, rhs: &CellVar, span: crate::constants::Span) -> CellVar {
-        todo!()
+        let one = Fr::from(1);
+
+        let res = self.new_internal_var(Value::Mul(*lhs, *rhs), span);
+
+        let a = LinearCombination {
+            terms: Some(HashMap::from_iter(vec![(*lhs, one)])),
+            constant: None,
+        };
+
+        let b = LinearCombination {
+            terms: Some(HashMap::from_iter(vec![(*rhs, one)])),
+            constant: None,
+        };
+
+        let c = LinearCombination {
+            terms: Some(HashMap::from_iter(vec![(res, one)])),
+            constant: None,
+        };
+
+        self.add_constraint(a, b, c);
+
+        res
     }
     
-    fn constraint_mul_const(&mut self, var: &CellVar, cst: &Self::Field, span: crate::constants::Span) -> CellVar {
-        todo!()
+    /// to constraint:
+    /// x * cst = res
+    /// given:
+    /// a * b = c
+    /// then:
+    /// a = x
+    /// b = cst
+    /// c = res
+    fn constraint_mul_const(&mut self, x: &CellVar, cst: &Self::Field, span: crate::constants::Span) -> CellVar {
+        let one = Fr::from(1);
+
+        let res = self.new_internal_var(Value::Scale(*cst, *x), span);
+
+        let a = LinearCombination {
+            terms: Some(HashMap::from_iter(vec![(*x, one)])),
+            constant: None,
+        };
+
+        let b = LinearCombination {
+            terms: None,
+            constant: Some(*cst),
+        };
+
+        let c = LinearCombination {
+            terms: Some(HashMap::from_iter(vec![(res, one)])),
+            constant: None,
+        };
+
+        self.add_constraint(a, b, c);
+
+        res
     }
     
-    fn constraint_eq_const(&mut self, var: &CellVar, cst: Self::Field, span: crate::constants::Span) {
-        todo!()
+    /// to constraint:
+    /// x = cst
+    /// given:
+    /// a * b = c
+    /// then:
+    /// a = x
+    /// b = 1
+    /// c = cst
+    fn constraint_eq_const(&mut self, x: &CellVar, cst: Self::Field, span: crate::constants::Span) {
+        let one = Fr::from(1);
+
+        let a = LinearCombination {
+            terms: Some(HashMap::from_iter(vec![(*x, one)])),
+            constant: None,
+        };
+
+        let b = LinearCombination {
+            terms: None,
+            constant: Some(one),
+        };
+
+        let c = LinearCombination {
+            terms: None,
+            constant: Some(cst),
+        };
+
+        self.add_constraint(a, b, c);
     }
 
+    /// to constraint:
+    /// lhs = rhs
+    /// given:
+    /// a * b = c
+    /// then:
+    /// a = lhs
+    /// b = 1
+    /// c = rhs
     fn constraint_eq_var(&mut self, lhs: &CellVar, rhs: &CellVar, span: crate::constants::Span) {
-        todo!()
+        let one = Fr::from(1);
+
+        let a = LinearCombination {
+            terms: Some(HashMap::from_iter(vec![(*lhs, one)])),
+            constant: None,
+        };
+
+        let b = LinearCombination {
+            terms: None,
+            constant: Some(one),
+        };
+
+        let c = LinearCombination {
+            terms: Some(HashMap::from_iter(vec![(*rhs, one)])),
+            constant: None,
+        };
+
+        self.add_constraint(a, b, c);
     }
     
+    /// todo: how does circom constraint this?
     fn constraint_public_input(&mut self, val: Value<Self>, span: crate::constants::Span) -> CellVar {
         todo!()
     }
     
+    /// todo: how does circom constraint this?
     fn constraint_public_output(&mut self, val: Value<Self>, span: crate::constants::Span) -> CellVar {
         todo!()
     }
