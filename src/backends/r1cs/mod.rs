@@ -342,7 +342,10 @@ impl Backend for R1CS {
         value: Self::Field,
         span: crate::constants::Span,
     ) -> CellVar {
-        todo!()
+        let x = self.new_internal_var(Value::Constant(value), span);
+        self.constraint_eq_const(&x, value, span);
+
+        x
     }
 
     fn finalize_circuit(
