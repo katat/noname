@@ -65,7 +65,6 @@ impl LinearCombination {
             }
         }
 
-        // todo: should the constant be the factor of the first var which is always 1? is this correct way to constraint a constant?
         if let Some(constant) = &self.constant {
             let constant_bigint = BigInt::from_bytes_le(
                 num_bigint_dig::Sign::Plus,
@@ -90,7 +89,9 @@ impl LinearCombination {
         }
 
         if let Some(constant) = &self.constant {
-            sum += constant;
+            // doing this to ensure the value at index 0 is always 1, 
+            // as there will be a constraint check during witness generation
+            sum += *constant * witness.get(&0).unwrap();
         }
 
         sum
@@ -225,7 +226,8 @@ impl R1CS {
     pub fn new() -> Self {
         Self {
             constraints: Vec::new(),
-            next_variable: 0,
+            // the value of var indexed at 0 is always 1 in R1CS, so we skip it
+            next_variable: 1,
             witness_vars: HashMap::new(),
             debug_info: Vec::new(),
             public_input_size: 0,
@@ -384,6 +386,10 @@ impl Backend for R1CS {
         witness_env: &mut crate::witness::WitnessEnv<Self::Field>,
     ) -> crate::error::Result<Self::GeneratedWitness> {
         let mut witness = HashMap::<usize, Fr>::new();
+
+        // the 1st variable is always 1 in R1CS
+        witness.insert(0, Fr::from(1)); 
+
         for constraint in &self.constraints {
             for lc in &constraint.as_array() {
                 if let Some(terms) = &lc.terms {
