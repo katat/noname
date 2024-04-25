@@ -31,3 +31,4 @@ thiserror = "1.0.31"                                 # helpful error traits
 toml = "0.8.8"                                       # to parse manifest files
 constraint_writers = { git = "https://github.com/iden3/circom.git", tag = "v2.1.8"}
 num-bigint-dig = "0.6.0"
+rstest = "0.19.0"                                    # for testing different backend cases
