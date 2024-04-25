@@ -13,8 +13,15 @@ use crate::{
     witness::WitnessEnv,
 };
 
+use self::{kimchi::KimchiVesta, r1cs::R1CS};
+
 pub mod kimchi;
 pub mod r1cs;
+
+pub enum BackendKind {
+    KimchiVesta(KimchiVesta),
+    R1CS(R1CS),
+}
 
 // TODO: should it be cloneable? It is now so because FnInfo needs to be cloneable.
 pub trait Backend: Clone {
