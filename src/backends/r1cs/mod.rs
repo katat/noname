@@ -1,5 +1,6 @@
 pub mod builtin;
 
+use std::backtrace::Backtrace;
 use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom};
 use std::{collections::HashMap, io::{BufWriter, Write}};
@@ -30,14 +31,14 @@ pub struct R1CS {
     pub public_output_size: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Constraint {
     pub a: LinearCombination,
     pub b: LinearCombination,
     pub c: LinearCombination,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct LinearCombination {
     pub terms: Option<HashMap<CellVar, Fr>>,
     // todo: how do we use this constant?
@@ -53,6 +54,7 @@ impl Constraint {
 use ark_ff::fields::PrimeField;
 
 impl LinearCombination {
+    /// Convert to the circom format 
     pub fn to_bigint_values(&self) -> HashMap<usize, BigInt> {
         let mut values = HashMap::new();
         if let Some(terms) = &self.terms {
@@ -75,6 +77,23 @@ impl LinearCombination {
         }
 
         values
+    }
+
+    /// Evaluate the linear combination with the given witness
+    pub fn evaluate(&self, witness: &HashMap<usize, Fr>) -> Fr {
+        let mut sum = Fr::zero();
+
+        if let Some(terms) = &self.terms {
+            for (var, factor) in terms {
+                sum += *witness.get(&var.index).unwrap() * factor;
+            }
+        }
+
+        if let Some(constant) = &self.constant {
+            sum += constant;
+        }
+
+        sum
     }
 }
 
@@ -377,7 +396,11 @@ impl Backend for R1CS {
                     }
                 }
             }
-            // todo: check if the constraint is satisfied
+            // assert a * b = c
+            assert_eq!(
+                constraint.a.evaluate(&witness) * constraint.b.evaluate(&witness), 
+                constraint.c.evaluate(&witness)
+            );
         }
 
         Ok(GeneratedWitness { witness })
