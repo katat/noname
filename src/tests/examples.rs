@@ -108,9 +108,6 @@ fn test_arithmetic(#[case] backend: BackendKind) -> miette::Result<()> {
     let public_inputs = r#"{"public_input": "1"}"#;
     let private_inputs = r#"{"private_input": "1"}"#;
 
-    println!("public inputs: {:?}", public_inputs);
-    println!("private inputs: {:?}", private_inputs);
-
     test_file("arithmetic", public_inputs, private_inputs, vec![], backend)?;
 
     Ok(())
