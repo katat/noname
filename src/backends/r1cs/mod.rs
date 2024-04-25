@@ -437,9 +437,18 @@ impl Backend for R1CS {
 
         let res = self.new_internal_var(Value::LinearCombination(vec![(one, *lhs), (one, *rhs)], zero), span);
 
-        let a = LinearCombination {
-            terms: Some(HashMap::from_iter(vec![(*lhs, one), (*rhs, one)])),
-            constant: None,
+        // IMPORTANT: since terms use CellVar as key,
+        // HashMap automatically overrides it to single one term if the two vars are the same CellVar
+        let a = if lhs == rhs {
+            LinearCombination {
+                terms: Some(HashMap::from_iter(vec![(*lhs, Fr::from(2))])),
+                constant: None,
+            }
+        } else {
+            LinearCombination {
+                terms: Some(HashMap::from_iter(vec![(*lhs, one), (*rhs, one)])),
+                constant: None,
+            }
         };
 
         let b = LinearCombination {
