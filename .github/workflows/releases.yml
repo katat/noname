@@ -1,0 +1,30 @@
+name: Create Release on Tag
+
+on:
+  push:
+    tags:
+      - '*'  # Triggers on all tag pushes
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Set Tag Name
+      id: tag_name
+      run: echo "TAG_NAME=${GITHUB_REF##*/}" >> $GITHUB_ENV
+
+    - name: Compress Folder
+      run: zip -r stdlib-${TAG_NAME}.zip src/stdlib/native
+
+    - name: Create Draft Release
+      uses: ncipollo/release-action@v1
+      with:
+        tag: ${{ env.TAG_NAME }}
+        name: Release ${{ env.TAG_NAME }}
+        draft: true
+        artifacts: stdlib-${TAG_NAME}.zip
+        token: ${{ secrets.GITHUB_TOKEN }}
